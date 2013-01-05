@@ -3,6 +3,18 @@ module Main
 import Control.Monad.Identity
 import System
 
+{- TODO:
+
+* Make proofs of EffElem and SubList automatic
+* Make return/lift/call etc functions to lose interpreter overhead
+* Try to find nice notation
+* Allow adding effects/handlers in the middle of a program (e.g. adding
+  exception handlers)
+* More examples: concurrency, finer grained IO, nondeterminism, partiality. 
+* Are dependent resources possible (e.g. tracking file open state)?
+
+-}
+
 class Effective res (e : Type -> Type) (m : Type -> Type) where
      runEffect : res -> e t -> (res -> t -> m a) -> m a
 
