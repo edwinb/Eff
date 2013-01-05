@@ -52,6 +52,7 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
        Here : EffElem x (MkEff {a} x i :: xs)
        There : EffElem x xs -> EffElem x (y :: xs)
 
+
   data Eff : List (EFF m) -> Type -> Type where
        return : a -> Eff xs a
        (>>=)  : Eff xs a -> (a -> Eff xs b) -> Eff xs b
@@ -76,6 +77,17 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
  
   run : Monad m => Env xs -> Eff xs a -> m a
   run env prog = eff env prog (\env, r => return r)
+
+  -- This is a horrible way of automating a proof of list membership
+  -- statically. Do it better!
+
+  syntax eqHack = (| Here, 
+                     There Here, 
+                     There (There Here),
+                     There (There (There Here)),
+                     There (There (There (There Here))),
+                     There (There (There (There (There Here)))) |)
+  syntax Lift [x] = lift eqHack x
 
 ---- Some algebraic resource/effect types ----
 
@@ -136,8 +148,8 @@ testTree = Node (Node (Node Leaf 5 (Node Leaf 1 Leaf)) 3 (Node Leaf 1 Leaf))
 countOnes : Tree -> Eff [CHANNEL, STATE Int, IO_EXCEPTION String] ()
 countOnes Leaf = return ()
 countOnes (Node l v r) = do if v == 1
-                               then do n <- lift (There Here) Get
-                                       lift (There Here) (Put (n + 1))
+                               then do n <- Lift Get
+                                       Lift (Put (n + 1))
                                else return ()
                             countOnes l
                             countOnes r
@@ -145,23 +157,23 @@ countOnes (Node l v r) = do if v == 1
 countOnes' : Tree -> Eff [STATE Int] {m} ()
 countOnes' Leaf = return ()
 countOnes' (Node l v r) = do if v == 1
-                               then do n <- lift Here Get
-                                       lift Here (Put (n + 1))
+                               then do n <- Lift Get
+                                       Lift (Put (n + 1))
                                else return ()
                              countOnes' l
                              countOnes' r
 
 testProg : Eff [CHANNEL, STATE Int, IO_EXCEPTION String] ()
-testProg = do val <- lift (There Here) Get
-              lift Here (OutCh '?')
-              c <- lift Here InCh
-              if (c == 'x') then lift (There (There Here)) (Raise "NO!")
+testProg = do val <- Lift Get
+              Lift (OutCh '?')
+              c <- Lift InCh
+              if (c == 'x') then Lift (Raise "NO!")
                             else return ()
               let tot = cast c + val
-              lift Here (OutCh (cast tot))
+              Lift (OutCh (cast tot))
               call (Drop (Keep (Drop SubNil))) (countOnes' testTree)
-              nodes <- lift (There Here) Get
-              lift Here (OutInt nodes)
+              nodes <- Lift Get
+              Lift (OutInt nodes)
               return ()
 
 main : IO ()
