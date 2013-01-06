@@ -59,31 +59,32 @@ testTree = Node (Node (Node Leaf 5 (Node Leaf 1 Leaf)) 3 (Node Leaf 1 Leaf))
                 (Node Leaf 1 Leaf)
 
 write : Eff [STATE Int] ()
-write = Effect (Put 42)
+write = effect (Put 42)
 
 countOnes : Monad m => Tree -> Eff [STATE Int] {m} ()
 countOnes Leaf = return ()
 countOnes (Node l v r) = do if v == 1
-                               then do n <- Effect Get
-                                       Effect (Put (n + 1))
+                               then do n <- effect Get
+                                       effect (Put (n + 1))
                                else return ()
                             countOnes l
                             countOnes r
 
-testProg : Eff [CHANNEL, STATE Int, IO_EXCEPTION] ()
-testProg = do val <- Effect Get
-              Effect (OutCh '?')
-              c <- Effect InCh
-              if (c == 'x') then Effect (Raise "NO!")
+testProg : Eff [CHANNEL, STATE Int, IO_EXCEPTION] Int
+testProg = do val <- effect Get
+              effect (OutCh '?')
+              c <- effect InCh
+              if (c == 'x') then effect (Raise "NO!")
                             else return ()
               let tot = cast c + val
-              Effect (OutCh (cast tot)) 
-              Call (countOnes testTree)
-              nodes <- Effect Get
-              Effect (OutInt nodes)
+              effect (OutCh (cast tot)) 
+              call (countOnes testTree)
+              nodes <- effect Get
+              effect (OutInt nodes)
               lift (putStr "DONE!\n")
-              return ()
+              effect Get
 
 main : IO ()
-main = run [(), 0, ()] testProg
+main = do n <- run [(), 0, ()] testProg
+          print n
 

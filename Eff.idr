@@ -50,13 +50,32 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
        Here : EffElem x (MkEff {a} x i :: xs)
        There : EffElem x xs -> EffElem x (y :: xs)
 
+  -- some proof automation
+  findEffElem : Nat -> Tactic -- Nat is maximum search depth
+  findEffElem O = Refine "Here" `Seq` Solve 
+  findEffElem (S n) = Try (Refine "Here" `Seq` Solve)
+                          (Refine "There" `Seq` (Solve `Seq` findEffElem n))
+ 
+  findSubList : Nat -> Tactic
+  findSubList O = Refine "SubNil" `Seq` Solve
+  findSubList (S n) 
+     = Try (Refine "SubNil" `Seq` Solve)
+           ((Try (Refine "Keep" `Seq` Solve)
+                 (Refine "Drop" `Seq` Solve)) `Seq` findSubList n)
+
+  -- the language of Effects
 
   data Eff : List (EFF m) -> Type -> Type where
        return : a -> Eff xs a
        (>>=)  : Eff xs a -> (a -> Eff xs b) -> Eff xs b
        effect : {e : Type -> Type} -> 
-                e t -> EffElem e xs -> Eff xs t
-       call   : Eff ys t -> SubList ys xs -> Eff xs t
+                {default tactics { reflect findEffElem 10; solve; } 
+                   p : EffElem e xs} -> 
+                e t -> Eff xs t
+       call   : {default tactics { reflect findSubList 10; solve; }
+                   p : SubList ys xs} ->
+                Eff ys t -> Eff xs t
+       callB  : Eff ys t -> SubList ys xs -> Eff xs t
        lift   : m a -> Eff xs a
 
   infixl 2 <$>
@@ -69,6 +88,8 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
                     arg <- v
                     return (fn arg)
 
+  -- an interpreter
+
   execEff : Monad m => Env xs -> EffElem e xs -> e a ->
                        (Env xs -> a -> m t) -> m t
   execEff (val :: env) Here eff k 
@@ -80,8 +101,8 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
   eff env (return x)   k = k env x
   eff env (prog >>= c) k 
      = eff env prog (\env', p' => eff env' (c p') k)
-  eff env (effect effP prf) k = execEff env prf effP k
-  eff env (call effP prf) k 
+  eff env (effect {p=prf} effP) k = execEff env prf effP k
+  eff env (call {p=prf} effP) k 
      = let env' = dropEnv env prf in 
            eff env' effP (\envk, p' => k (rebuildEnv envk prf env) p')
   eff env (lift act) k = do x <- act
@@ -90,26 +111,5 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
   run : Monad m => Env xs -> Eff xs a -> m a
   run env prog = eff env prog (\env, r => return r)
 
-findEffElem : Nat -> Tactic -- Nat is maximum search depth
-findEffElem O = Refine "Here" `Seq` Solve 
-findEffElem (S n) = Try (Refine "Here" `Seq` Solve)
-                        (Refine "There" `Seq` (Solve `Seq` findEffElem n))
- 
-findSubList : Nat -> Tactic
-findSubList O = Refine "SubNil" `Seq` Solve
-findSubList (S n) 
-   = Try (Refine "SubNil" `Seq` Solve)
-         ((Try (Refine "Keep" `Seq` Solve)
-               (Refine "Drop" `Seq` Solve)) `Seq` findSubList n)
-
-findSubList' : Nat -> Tactic
-findSubList' O = Refine "SubNil"
-findSubList' (S n) 
-   = Try ((Try (Refine "Keep")
-               (Refine "Drop")) `Seq` (findSubList' n))
-         (Refine "SubNil")
-
-syntax Effect [x] = effect x (tactics { reflect findEffElem 10; solve; })
-syntax Call [x] = call x (tactics { reflect findSubList 10; solve; })
 
 
