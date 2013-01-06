@@ -24,8 +24,8 @@ instance Monad m => Effective a (State a) m where
 instance Effective () (Exception a) Maybe where
      runEffect _ (Raise e) k = Nothing
 
-instance Effective () (Exception a) IO where
-     runEffect _ (Raise e) k = do putStrLn "FAIL!"
+instance Show a => Effective () (Exception a) IO where
+     runEffect _ (Raise e) k = do putStrLn (show e)
                                   believe_me (exit 1)
 
 instance Effective () Channel IO where
@@ -45,8 +45,8 @@ CHANNEL = MkEff Channel %instance
 EXCEPTION : Type -> EFF Maybe
 EXCEPTION t = MkEff (Exception t) %instance
 
-IO_EXCEPTION : Type -> EFF IO
-IO_EXCEPTION t = MkEff (Exception t) %instance
+IO_EXCEPTION : EFF IO
+IO_EXCEPTION = MkEff (Exception String) %instance
 
 
 ---- A simple example ----
@@ -61,25 +61,16 @@ testTree = Node (Node (Node Leaf 5 (Node Leaf 1 Leaf)) 3 (Node Leaf 1 Leaf))
 write : Eff [STATE Int] ()
 write = Effect (Put 42)
 
-countOnes : Tree -> Eff [CHANNEL, STATE Int, IO_EXCEPTION String] ()
+countOnes : Monad m => Tree -> Eff [STATE Int] {m} ()
 countOnes Leaf = return ()
 countOnes (Node l v r) = do if v == 1
-                               then do n <- Effect Get 
+                               then do n <- Effect Get
                                        Effect (Put (n + 1))
                                else return ()
                             countOnes l
                             countOnes r
 
-countOnes' : Monad m => Tree -> Eff [STATE Int] {m} ()
-countOnes' Leaf = return ()
-countOnes' (Node l v r) = do if v == 1
-                               then do n <- Effect Get
-                                       Effect (Put (n + 1))
-                               else return ()
-                             countOnes' l
-                             countOnes' r
-
-testProg : Eff [CHANNEL, STATE Int, IO_EXCEPTION String] ()
+testProg : Eff [CHANNEL, STATE Int, IO_EXCEPTION] ()
 testProg = do val <- Effect Get
               Effect (OutCh '?')
               c <- Effect InCh
@@ -87,7 +78,7 @@ testProg = do val <- Effect Get
                             else return ()
               let tot = cast c + val
               Effect (OutCh (cast tot)) 
-              Call (countOnes' testTree)
+              Call (countOnes testTree)
               nodes <- Effect Get
               Effect (OutInt nodes)
               lift (putStr "DONE!\n")
