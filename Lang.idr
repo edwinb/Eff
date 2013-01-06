@@ -17,8 +17,10 @@ eval (Var x) = do vs <- call get
                        Just val => return val
 eval (Let (var, val) scope)
              = do vs <- call get
-                  call (put ((var, val) :: vs))
-                  eval scope
+                  call (put ((var, val) :: vs)) -- yes, I know ;)
+                  res <- eval scope
+                  call (put vs)
+                  return res
 eval (Val x) = return x
 eval (Add l r) = [| eval l + eval r |]
 eval (Random upper) = do val <- call (rndInt 0 upper)
