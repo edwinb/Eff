@@ -22,6 +22,10 @@ using (xs, ys : List a)
        Keep   : SubList xs ys -> SubList (x :: xs) (x :: ys)
        Drop   : SubList xs ys -> SubList xs (x :: ys)
 
+  subListId : SubList xs xs
+  subListId {xs = Nil} = SubNil
+  subListId {xs = x :: xs} = Keep subListId
+
 ---- The Effect EDSL itself ----
 
 data EFF : (Type -> Type) -> Type where
@@ -59,7 +63,8 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
   findSubList : Nat -> Tactic
   findSubList O = Refine "SubNil" `Seq` Solve
   findSubList (S n) 
-     = Try (Refine "SubNil" `Seq` Solve)
+     = Try (Try (Refine "SubNil" `Seq` Solve)
+                (Refine "subListId" `Seq` Solve))
            ((Try (Refine "Keep" `Seq` Solve)
                  (Refine "Drop" `Seq` Solve)) `Seq` findSubList n)
 
@@ -75,7 +80,6 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
        call   : {default tactics { reflect findSubList 10; solve; }
                    p : SubList ys xs} ->
                 Eff ys t -> Eff xs t
-       callB  : Eff ys t -> SubList ys xs -> Eff xs t
        lift   : m a -> Eff xs a
 
   infixl 2 <$>

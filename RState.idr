@@ -39,6 +39,12 @@ instance Effective () Channel IO where
 STATE : Monad m => Type -> EFF m
 STATE t = MkEff (State t) %instance
 
+get : Monad m => Eff [STATE x] {m} x
+get = effect Get
+
+put : Monad m => x -> Eff [STATE x] {m} ()
+put x = effect (Put x)
+
 CHANNEL : EFF IO
 CHANNEL = MkEff Channel %instance
 
@@ -59,30 +65,30 @@ testTree = Node (Node (Node Leaf 5 (Node Leaf 1 Leaf)) 3 (Node Leaf 1 Leaf))
                 (Node Leaf 1 Leaf)
 
 write : Eff [STATE Int] ()
-write = effect (Put 42)
+write = call (put 42)
 
 countOnes : Monad m => Tree -> Eff [STATE Int] {m} ()
 countOnes Leaf = return ()
 countOnes (Node l v r) = do if v == 1
-                               then do n <- effect Get
-                                       effect (Put (n + 1))
+                               then do n <- call get
+                                       call (put (n + 1))
                                else return ()
-                            countOnes l
-                            countOnes r
+                            call $ countOnes l
+                            call $ countOnes r
 
 testProg : Eff [CHANNEL, STATE Int, IO_EXCEPTION] Int
-testProg = do val <- effect Get
-              effect (OutCh '?')
+testProg = do val <- call get
+              effect $ OutCh '?'
               c <- effect InCh
-              if (c == 'x') then effect (Raise "NO!")
+              if (c == 'x') then effect $ Raise "NO!"
                             else return ()
               let tot = cast c + val
-              effect (OutCh (cast tot)) 
-              call (countOnes testTree)
-              nodes <- effect Get
-              effect (OutInt nodes)
-              lift (putStr "DONE!\n")
-              effect Get
+              effect $ OutCh (cast tot) 
+              call $ countOnes testTree
+              nodes <- call get
+              effect $ OutInt nodes
+              lift $ putStr "DONE!\n"
+              call get
 
 main : IO ()
 main = do n <- run [(), 0, ()] testProg
