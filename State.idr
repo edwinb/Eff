@@ -13,8 +13,8 @@ instance Monad m => Effective a (State a) m where
 STATE : Monad m => Type -> EFF m
 STATE t = MkEff (State t) %instance
 
-get : Monad m => Eff [STATE x] {m} x
+get : GenEff [STATE x] x
 get = effect Get
 
-put : Monad m => x -> Eff [STATE x] {m} ()
+put : x -> GenEff [STATE x] ()
 put x = effect (Put x)

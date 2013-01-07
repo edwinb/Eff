@@ -13,7 +13,7 @@ instance Monad m => Effective Int Random m where
 RND : Monad m => EFF m
 RND = MkEff Random %instance
 
-rndInt : Monad m => Int -> Int -> Eff [RND] {m} Int
+rndInt : Int -> Int -> GenEff [RND] Int
 rndInt lower upper = do v <- effect $ getRandom 
                         return (v `mod` (upper - lower) + lower)
 

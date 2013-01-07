@@ -114,4 +114,11 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
   run : Monad m => Env xs -> Eff xs a -> m a
   run env prog = eff env prog (\env, r => return r)
 
+syntax GenEff [xs] [a] = Monad m => Eff xs {m} a 
+
+-- some higher order things
+
+mapE : Monad m => (a -> Eff xs {m} b) -> List a -> Eff xs {m} (List b)
+mapE f []        = pure [] 
+mapE f (x :: xs) = [| f x :: mapE f xs |]
 
