@@ -1,6 +1,7 @@
 module Eff
 
 import Language.Reflection
+import Effective
 
 {- TODO:
 
@@ -12,19 +13,6 @@ import Language.Reflection
 * Are dependent resources possible (e.g. tracking file open state)?
 
 -}
-
-class Effective res (e : Type -> Type) (m : Type -> Type) where
-     runEffect : res -> e t -> (res -> t -> m a) -> m a
-
-using (xs, ys : List a)
-  data SubList : List a -> List a -> Type where
-       SubNil : SubList {a} [] []
-       Keep   : SubList xs ys -> SubList (x :: xs) (x :: ys)
-       Drop   : SubList xs ys -> SubList xs (x :: ys)
-
-  subListId : SubList xs xs
-  subListId {xs = Nil} = SubNil
-  subListId {xs = x :: xs} = Keep subListId
 
 ---- The Effect EDSL itself ----
 
@@ -71,8 +59,8 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
   -- the language of Effects
 
   data Eff : List (EFF m) -> Type -> Type where
-       return : a -> Eff xs a
-       (>>=)  : Eff xs a -> (a -> Eff xs b) -> Eff xs b
+       value  : a -> Eff xs a
+       ebind  : Eff xs a -> (a -> Eff xs b) -> Eff xs b
        effect : {e : Type -> Type} -> 
                 {default tactics { reflect findEffElem 10; solve; } 
                    p : EffElem e xs} -> 
@@ -82,10 +70,21 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
                 Eff ys t -> Eff xs t
        lift   : m a -> Eff xs a
 
+
+  -- for 'do' notation
+
+  return : a -> Eff xs a
+  return = value
+
+  (>>=) : Eff xs a -> (a -> Eff xs b) -> Eff xs b
+  (>>=) = ebind
+
+  -- for idiom brackets
+
   infixl 2 <$>
 
   pure : a -> Eff xs a
-  pure = return
+  pure = value
 
   (<$>) : Eff xs (a -> b) -> Eff xs a -> Eff xs b
   (<$>) prog v = do fn <- prog
@@ -102,8 +101,8 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
       = execEff env p eff (\env', v => k (val :: env') v)
 
   eff : Monad m => Env xs -> Eff xs a -> (Env xs -> a -> m b) -> m b
-  eff env (return x)   k = k env x
-  eff env (prog >>= c) k 
+  eff env (value x) k = k env x
+  eff env (prog `ebind` c) k 
      = eff env prog (\env', p' => eff env' (c p') k)
   eff env (effect {p=prf} effP) k = execEff env prf effP k
   eff env (call {p=prf} effP) k 
@@ -114,6 +113,5 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
 
   run : Monad m => Env xs -> Eff xs a -> m a
   run env prog = eff env prog (\env, r => return r)
-
 
 
