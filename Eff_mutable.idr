@@ -1,4 +1,4 @@
-module Eff
+module Eff_mutable
 
 import Language.Reflection
 import Effective
@@ -8,7 +8,7 @@ import Effective
 * Make effect/lift/call etc functions to lose interpreter overhead
 * Try to find nice notation
 * Allow adding effects/handlers in the middle of a program (e.g. adding
-  exception handlers) [Hmm: doesn't seem to add any expressivity]
+  exception handlers)
 * More examples: concurrency, finer grained IO, nondeterminism, partiality. 
 * Are dependent resources possible (e.g. tracking file open state)?
 
@@ -20,7 +20,9 @@ data EFF : (Type -> Type) -> Type where
      MkEff : (eff : Type -> Type) -> 
              Effective a eff f -> EFF f
 
-using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
+using (m : Type -> Type, 
+       xs : List (EFF m), xs' : List (EFF m), xs'' : List (EFF m),
+       ys : List (EFF m))
 
   data Env  : List (EFF m) -> Type where
        Nil  : Env {m} Nil
@@ -45,47 +47,51 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
   -- some proof automation
   findEffElem : Nat -> Tactic -- Nat is maximum search depth
   findEffElem O = Refine "Here" `Seq` Solve 
-  findEffElem (S n) = Try (Refine "Here" `Seq` Solve)
-                          (Refine "There" `Seq` (Solve `Seq` findEffElem n))
+  findEffElem (S n) = GoalType "EffElem" 
+            (Try (Refine "Here" `Seq` Solve)
+                 (Refine "There" `Seq` (Solve `Seq` findEffElem n)))
  
   findSubList : Nat -> Tactic
   findSubList O = Refine "SubNil" `Seq` Solve
   findSubList (S n) 
-     = Try (Try (Refine "SubNil" `Seq` Solve)
-                (Refine "subListId" `Seq` Solve))
+     = GoalType "SubList" 
+           (Try (Try (Refine "SubNil" `Seq` Solve)
+                     (Refine "subListId" `Seq` Solve))
            ((Try (Refine "Keep" `Seq` Solve)
-                 (Refine "Drop" `Seq` Solve)) `Seq` findSubList n)
+                 (Refine "Drop" `Seq` Solve)) `Seq` findSubList n))
 
   -- the language of Effects
 
-  data Eff : List (EFF m) -> Type -> Type where
-       value  : a -> Eff xs a
-       ebind  : Eff xs a -> (a -> Eff xs b) -> Eff xs b
+  data MEff : List (EFF m) -> List (EFF m) -> Type -> Type where
+       value  : a -> MEff xs xs a
+       ebind  : MEff xs xs' a -> (a -> MEff xs' xs'' b) -> MEff xs xs'' b
        effect : {e : Type -> Type} -> 
                 {default tactics { reflect findEffElem 10; solve; } 
                    p : EffElem e xs} -> 
-                e t -> Eff xs t
+                e t -> MEff xs xs t
        call   : {default tactics { reflect findSubList 10; solve; }
                    p : SubList ys xs} ->
-                Eff ys t -> Eff xs t
-       lift   : m a -> Eff xs a
+                MEff ys ys t -> MEff xs xs t
+       lift   : m a -> MEff xs xs a
+
+--   Eff : List (EFF m) -> Type -> Type
 
   -- for 'do' notation
 
-  return : a -> Eff xs a
+  return : a -> MEff xs xs a
   return = value
 
-  (>>=) : Eff xs a -> (a -> Eff xs b) -> Eff xs b
-  (>>=) x k = ebind x k
+  (>>=) : MEff xs xs' a -> (a -> MEff xs' xs'' b) -> MEff xs xs'' b
+  (>>=) = ebind
 
   -- for idiom brackets
 
   infixl 2 <$>
 
-  pure : a -> Eff xs a
+  pure : a -> MEff xs xs a
   pure = value
 
-  (<$>) : Eff xs (a -> b) -> Eff xs a -> Eff xs b
+  (<$>) : MEff xs xs (a -> b) -> MEff xs xs a -> MEff xs xs b
   (<$>) prog v = do fn <- prog
                     arg <- v
                     return (fn arg)
@@ -99,7 +105,7 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
   execEff (val :: env) (There p) eff k 
       = execEff env p eff (\env', v => k (val :: env') v)
 
-  eff : Monad m => Env xs -> Eff xs a -> (Env xs -> a -> m b) -> m b
+  eff : Monad m => Env xs -> MEff xs xs' a -> (Env xs' -> a -> m b) -> m b
   eff env (value x) k = k env x
   eff env (prog `ebind` c) k 
      = eff env prog (\env', p' => eff env' (c p') k)
@@ -110,17 +116,19 @@ using (m : Type -> Type, xs : List (EFF m), ys : List (EFF m))
   eff env (lift act) k = do x <- act
                             k env x
 
-  run : Monad m => Env xs -> Eff xs a -> m a
+  run : Monad m => Env xs -> MEff xs xs' a -> m a
   run env prog = eff env prog (\env, r => return r)
 
-syntax GenEff [xs] [a] = Monad m => Eff xs {m} a 
+syntax Eff [xs] [t] = MEff xs xs t
+syntax GenEff [xs] [a] = Monad m => MEff xs xs {m} a 
 
 -- some higher order things
 
-mapE : Monad m => (a -> Eff xs {m} b) -> List a -> Eff xs {m} (List b)
+mapE : Monad m => (a -> MEff xs xs {m} b) -> List a -> MEff xs xs {m} (List b)
 mapE f []        = pure [] 
 mapE f (x :: xs) = [| f x :: mapE f xs |]
 
-when : Monad m => Bool -> Eff xs {m} () -> Eff xs {m} ()
+when : Monad m => Bool -> MEff xs xs {m} () -> MEff xs xs {m} ()
 when True  e = e
 when False e = return ()
+

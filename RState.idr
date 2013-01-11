@@ -1,6 +1,6 @@
 module Main
 
-import Eff
+import Eff_mutable
 import System
 import State
 import Exception
@@ -37,30 +37,29 @@ testTree = Node (Node (Node Leaf 5 (Node Leaf 1 Leaf)) 3 (Node Leaf 1 Leaf))
 write : Eff [STATE Int] ()
 write = call (put 42)
 
-countOnes : Monad m => Tree -> Eff [STATE Int] {m} ()
+countOnes : Tree -> GenEff [STATE Int] ()
 countOnes Leaf = return ()
 countOnes (Node l v r) = do if v == 1
                                then do n <- call get
                                        call (put (n + 1))
                                else return ()
-                            call $ countOnes l
-                            call $ countOnes r
+                            call (countOnes l)
+                            call (countOnes r)
 
-testProg : Eff [CHANNEL, STATE Int, IO_EXCEPTION] Int
+testProg : Eff [IO_EXCEPTION, CHANNEL, STATE Int] Int
 testProg = do val <- call get
-              effect $ OutCh '?'
+              effect (OutCh '?')
               c <- effect InCh
-              if (c == 'x') then call $ io_raise "NO!"
-                            else return ()
+              when (c == 'x') $ effect (Raise "NO!")
               let tot = cast c + val
-              effect $ OutCh (cast tot) 
-              call $ countOnes testTree
+              effect (OutCh (cast tot))
+              call (countOnes testTree)
               nodes <- call get
-              effect $ OutInt nodes
-              lift $ putStr "DONE!\n"
+              effect (OutInt nodes)
+              lift (putStr "DONE!\n")
               call get
 
 main : IO ()
-main = do n <- run [(), 0, ()] testProg
+main = do n <- run [(), (), 0] testProg
           print n
 
