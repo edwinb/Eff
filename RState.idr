@@ -46,7 +46,7 @@ countOnes (Node l v r) = do if v == 1
                             call (countOnes l)
                             call (countOnes r)
 
-testProg : Eff [IO_EXCEPTION, CHANNEL, STATE Int] Int
+testProg : Eff [IO_EXCEPTION, CHANNEL, STATE Int] ()
 testProg = do val <- call get
               effect (OutCh '?')
               c <- effect InCh

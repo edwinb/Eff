@@ -5,10 +5,10 @@ import System
 
 %access public
 
-data Exception : Type -> Type -> Type where
-     Raise : a -> Exception a b 
+data Exception : Type -> Type -> Type -> Type -> Type where
+     Raise : a -> Exception a () () b 
 
-instance Effective () (Exception a) Maybe where
+instance Effective (Exception a) Maybe where
      runEffect _ (Raise e) k = Nothing
 
 data IOExcept : Type -> Type where
@@ -30,23 +30,23 @@ instance Monad IOExcept where
                                                 ka
                                   Nothing => return Nothing)
      
-instance Effective () (Exception a) IOExcept where
+instance Effective (Exception a) IOExcept where
      runEffect _ (Raise e) k = ioM (return Nothing)
 
-instance Show a => Effective () (Exception a) IO where
+instance Show a => Effective (Exception a) IO where
      runEffect _ (Raise e) k = do print e
                                   believe_me (exit 1)
 
 namespace Maybe_Exception
   EXCEPTION : Type -> EFF Maybe
-  EXCEPTION t = MkEff (Exception t) %instance
+  EXCEPTION t = MkEff () (Exception t) %instance
 
   raise : a -> Eff [EXCEPTION a] b
   raise err = effect (Raise err)
 
 namespace IO_Exception
   IO_EXCEPTION : EFF IO
-  IO_EXCEPTION = MkEff (Exception String) %instance
+  IO_EXCEPTION = MkEff () (Exception String) %instance
 
   io_raise : Show a => a -> Eff [IO_EXCEPTION] b
   io_raise err = effect (Raise (show err))
