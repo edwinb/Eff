@@ -1,11 +1,12 @@
 module File
 
 import Eff_mutable
+import Exception
 
 data Handle : Mode -> Type where
      FH : File -> Handle m
 
-data FileIO : Type -> Type -> Type -> Type where
+data FileIO : Effect where
      Open  : String -> (m : Mode) -> FileIO () (Handle m) ()
      Close : FileIO (Handle m) () ()
 
@@ -13,15 +14,12 @@ data FileIO : Type -> Type -> Type -> Type where
      WriteLine : String -> FileIO (Handle Write) (Handle Write) ()
      EOF       : FileIO (Handle Read) (Handle Read) Bool
 
-runEffect' : res -> FileIO res res' t -> (res' -> t -> IO a) -> IO a
-runEffect' () (Open fname m) k = do h <- openFile fname m; k (FH h) ()
-runEffect' (FH h) Close      k = do closeFile h; k () ()
-runEffect' (FH h) ReadLine        k = do str <- fread h; k (FH h) str
-runEffect' (FH h) (WriteLine str) k = do fwrite h str; k (FH h) ()
-runEffect' (FH h) EOF             k = do e <- feof h; k (FH h) e
-
 instance Effective FileIO IO where
-     runEffect = runEffect'
+    runEffect () (Open fname m) k = do h <- openFile fname m; k (FH h) ()
+    runEffect (FH h) Close      k = do closeFile h; k () ()
+    runEffect (FH h) ReadLine        k = do str <- fread h; k (FH h) str
+    runEffect (FH h) (WriteLine str) k = do fwrite h str; k (FH h) ()
+    runEffect (FH h) EOF             k = do e <- feof h; k (FH h) e
 
 FILE_IO : Type -> EFF IO
 FILE_IO t = MkEff t FileIO %instance

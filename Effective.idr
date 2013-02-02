@@ -1,6 +1,9 @@
 module Effective
 
-class Effective (e : Type -> Type -> Type -> Type) 
+Effect : Type
+Effect = Type -> Type -> Type -> Type
+
+class Effective (e : Effect) 
                 (m : Type -> Type) where
      runEffect : res -> (eff : e res res' t) -> (res' -> t -> m a) -> m a
 

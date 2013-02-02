@@ -31,8 +31,7 @@ using (m : Type -> Type,
   findSubList O = Refine "SubNil" `Seq` Solve
   findSubList (S n) 
      = GoalType "SubList" 
-           (Try (Try (Refine "SubNil" `Seq` Solve)
-                     (Refine "subListId" `Seq` Solve))
+           (Try (Refine "subListId" `Seq` Solve)
            ((Try (Refine "Keep" `Seq` Solve)
                  (Refine "Drop" `Seq` Solve)) `Seq` findSubList n))
 
@@ -47,7 +46,7 @@ using (m : Type -> Type,
   data MEff : Vect (EFF m) n -> Vect (EFF m) n -> Type -> Type where
        value  : a -> MEff xs xs a
        ebind  : MEff xs xs' a -> (a -> MEff xs' xs'' b) -> MEff xs xs'' b
-       effect : {a, b: _} -> {e : Type -> Type -> Type -> Type} ->
+       effect : {a, b: _} -> {e : Effect} ->
                 {default tactics { reflect findEffElem 10; solve; } 
                   prf : EffElem e a xs} -> 
                   (eff : e a b t) -> 
@@ -81,7 +80,7 @@ using (m : Type -> Type,
 
   -- an interpreter
 
-  execEff : Monad m => {e : Type -> Type -> Type -> Type} -> {t : Type} ->
+  execEff : Monad m => {e : Effect} -> {t : Type} ->
                        Env xs -> (p : EffElem e res xs) -> 
                        (eff : e res b a) ->
                        (Env (updateResTy xs p eff) -> a -> m t) -> m t
