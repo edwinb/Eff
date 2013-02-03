@@ -40,6 +40,19 @@ using (m : Type -> Type,
   updateResTy {b} (MkEff a e :: xs) Here n = (MkEff b e) :: xs
   updateResTy (x :: xs) (There p) n = x :: updateResTy xs p n
 
+  infix 5 :::, :-, :=
+
+  data LRes : lbl -> Type -> Type where
+       (:=) : (x : lbl) -> res -> LRes x res
+
+  (:::) : lbl -> EFF -> EFF 
+  (:::) {lbl} x (MkEff r eff) = MkEff (LRes x r) eff
+
+  unlabel : {l : ty} -> Env m [l ::: x] -> Env m [x]
+  unlabel {m} {x = MkEff a eff} [l := v] = [v]
+
+  relabel : (l : ty) -> Env m [x] -> Env m [l ::: x]
+  relabel {x = MkEff a eff} l [v] = [l := v]
 
   -- the language of Effects
 
@@ -55,6 +68,7 @@ using (m : Type -> Type,
        call   : {default tactics { reflect findSubList 10; solve; }
                    prf : SubList ys xs} ->
                 MEff m ys ys' t -> MEff m xs (updateWith ys' xs prf) t
+       (:-)   : (l : ty) -> MEff m [x] [y] t -> MEff m [l ::: x] [l ::: y] t
        lift   : m a -> MEff m xs xs a
 
 --   Eff : List (EFF m) -> Type -> Type
@@ -98,6 +112,9 @@ using (m : Type -> Type,
   eff env (call {prf} effP) k 
      = let env' = dropEnv env prf in 
            eff env' effP (\envk, p' => k (rebuildEnv envk prf env) p')
+  eff {xs = [l ::: x]} env (l :- prog) k
+     = let env' = unlabel {l} env in
+           eff env' prog (\envk, p' => k (relabel l envk) p')
   eff env (lift act) k = do x <- act
                             k env x
 
