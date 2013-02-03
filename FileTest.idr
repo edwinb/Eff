@@ -6,22 +6,22 @@ import Eff_mutable
 
 data FName = Count | NotCount
 
-readFile : Eff [FILE_IO (Handle Read), Count ::: STATE Int] (List String)
+readFile : Eff IO [FILE_IO (Handle Read), STATE Int] (List String)
 readFile = readAcc [] where
-    readAcc : List String -> Eff [FILE_IO (Handle Read), Count ::: STATE Int] (List String)
+    readAcc : List String -> Eff IO [FILE_IO (Handle Read), STATE Int] (List String)
     readAcc acc = do e <- call eof
                      if (not e) 
                         then do str <- call readLine
-                                ls <- call (getFrom Count)
-                                call (putTo Count (ls + 1))
+                                ls <- call get
+                                call (put (ls + 1))
                                 readAcc (str :: acc)
                         else return (reverse acc)
 
-testFile : Eff [FILE_IO (), Count ::: STATE Int] ()
+testFile : Eff IO [FILE_IO (), STATE Int] ()
 testFile = do call (open "testFile" Read)
               str <- readFile
               lift $ print str
-              ls <- call (getFrom Count)
+              ls <- call get
               lift $ print ls
               call close
 

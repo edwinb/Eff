@@ -17,26 +17,24 @@ using (xs : Vect a m, ys : Vect a n)
   subListId {xs = Nil} = SubNil
   subListId {xs = x :: xs} = Keep subListId
 
-data EFF : (Type -> Type) -> Type where
-     MkEff : Type ->
-             (eff : Type -> Type -> Type -> Type) ->
-             Effective eff f -> EFF f
+data EFF : Type where
+     MkEff : Type -> (eff : Effect) -> EFF
 
 using (m : Type -> Type, 
-       xs : Vect (EFF m) n, xs' : Vect (EFF m) n, xs'' : Vect (EFF m) n,
-       ys : Vect (EFF m) p)
+       xs : Vect EFF n, xs' : Vect EFF n, xs'' : Vect EFF n,
+       ys : Vect EFF p)
 
-  data Env  : Vect (EFF m) n -> Type where
-       Nil  : Env {m} Nil
-       (::) : a -> Env {m} xs -> Env (MkEff a eff i :: xs)
+  data Env  : (m : Type -> Type) -> Vect EFF n -> Type where
+       Nil  : Env m Nil
+       (::) : Effective eff m => a -> Env m xs -> Env m (MkEff a eff :: xs)
 
   data EffElem : (Type -> Type -> Type -> Type) -> Type ->
-                 Vect (EFF m) n -> Type where
-       Here : EffElem x a (MkEff a x i :: xs)
+                 Vect EFF n -> Type where
+       Here : EffElem x a (MkEff a x :: xs)
        There : EffElem x a xs -> EffElem x a (y :: xs)
 
   -- make an environment corresponding to a sub-list
-  dropEnv : Env ys -> SubList xs ys -> Env xs
+  dropEnv : Env m ys -> SubList xs ys -> Env m xs
   dropEnv [] SubNil = []
   dropEnv (v :: vs) (Keep rest) = v :: dropEnv vs rest
   dropEnv (v :: vs) (Drop rest) = dropEnv vs rest
@@ -50,8 +48,8 @@ using (m : Type -> Type,
 
   -- put things back, replacing old with new in the sub-environment
   rebuildEnv : {ys' : Vect _ p} ->
-               Env ys' -> (prf : SubList ys xs) -> 
-               Env xs -> Env (updateWith ys' xs prf) 
+               Env m ys' -> (prf : SubList ys xs) -> 
+               Env m xs -> Env m (updateWith ys' xs prf) 
   rebuildEnv [] SubNil env = env
   rebuildEnv (x :: xs) (Keep rest) (y :: env) =  x :: rebuildEnv xs rest env
   rebuildEnv xs (Drop rest) (y :: env) = y :: rebuildEnv xs rest env

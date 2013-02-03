@@ -15,7 +15,7 @@ using (ty : Type, l : ty)
 (:::) : Monad m => a -> EFF m -> EFF m
 (:::) x (MkEff r eff c) = MkEff r (Label x eff) %instance
 
--- (:-) : (l : ty) -> MEff [a] [b] t -> MEff [l ::: a] [l ::: b] t
+(:-) : (l : ty) -> MEff [a] [b] t -> MEff [l ::: a] [l ::: b] t
 -- (:-) {a = MkEff res e i} {b = MkEff res' e i}
 --      l (effect {prf = Here} {xs = [MkEff res e i]} eff) 
 --      = effect {prf = Here} {xs = [MkEff res (Label _ (MkEff res e i))]} 

@@ -21,22 +21,22 @@ instance Effective FileIO IO where
     runEffect (FH h) (WriteLine str) k = do fwrite h str; k (FH h) ()
     runEffect (FH h) EOF             k = do e <- feof h; k (FH h) e
 
-FILE_IO : Type -> EFF IO
-FILE_IO t = MkEff t FileIO %instance
+FILE_IO : Type -> EFF
+FILE_IO t = MkEff t FileIO 
 
-open : String -> (m : Mode) -> MEff [FILE_IO ()] [FILE_IO (Handle m)] ()
+open : String -> (m : Mode) -> MEff IO [FILE_IO ()] [FILE_IO (Handle m)] ()
 open f m = effect (Open f m)
 
-close : MEff [FILE_IO (Handle m)] [FILE_IO ()] ()
+close : MEff IO [FILE_IO (Handle m)] [FILE_IO ()] ()
 close = effect Close
 
-readLine : Eff [FILE_IO (Handle Read)] String
+readLine : Eff IO [FILE_IO (Handle Read)] String
 readLine = effect ReadLine
 
-writeLine : String -> Eff [FILE_IO (Handle Write)] ()
+writeLine : String -> Eff IO [FILE_IO (Handle Write)] ()
 writeLine str = effect (WriteLine str)
 
-eof : Eff [FILE_IO (Handle Read)] Bool
+eof : Eff IO [FILE_IO (Handle Read)] Bool
 eof = effect EOF
 
 
