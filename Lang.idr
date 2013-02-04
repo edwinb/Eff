@@ -10,9 +10,9 @@ data Expr = Var String
           | Add Expr Expr
           | Random Int
 
-eval : Expr -> GenEff [EXCEPTION String, RND, STATE (List (String, Int))] Int
+eval : Expr -> Eff [EXCEPTION String, RND, STATE (List (String, Int))] Int
 eval (Var x) = do vs <- call get
-                  case List.lookup x vs of
+                  case lookup x vs of
                         Nothing => call (raise ("No such variable " ++ x))
                         Just val => return val
 eval (Let (var, val) scope)

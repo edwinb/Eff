@@ -24,19 +24,19 @@ instance Effective FileIO IO where
 FILE_IO : Type -> EFF
 FILE_IO t = MkEff t FileIO 
 
-open : String -> (m : Mode) -> MEff IO [FILE_IO ()] [FILE_IO (Handle m)] ()
+open : String -> (m : Mode) -> EffM IO [FILE_IO ()] [FILE_IO (Handle m)] ()
 open f m = effect (Open f m)
 
-close : MEff IO [FILE_IO (Handle m)] [FILE_IO ()] ()
+close : EffM IO [FILE_IO (Handle m)] [FILE_IO ()] ()
 close = effect Close
 
-readLine : Eff IO [FILE_IO (Handle Read)] String
+readLine : EffT IO [FILE_IO (Handle Read)] String
 readLine = effect ReadLine
 
-writeLine : String -> Eff IO [FILE_IO (Handle Write)] ()
+writeLine : String -> EffT IO [FILE_IO (Handle Write)] ()
 writeLine str = effect (WriteLine str)
 
-eof : Eff IO [FILE_IO (Handle Read)] Bool
+eof : EffT IO [FILE_IO (Handle Read)] Bool
 eof = effect EOF
 
 

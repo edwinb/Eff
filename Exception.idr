@@ -40,6 +40,6 @@ instance Show a => Effective (Exception a) IO where
 EXCEPTION : Type -> EFF 
 EXCEPTION t = MkEff () (Exception t) 
 
-raise : a -> Eff m [EXCEPTION a] b
+raise : a -> Eff [EXCEPTION a] b
 raise err = effect (Raise err)
 

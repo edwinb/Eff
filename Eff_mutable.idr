@@ -56,39 +56,39 @@ using (m : Type -> Type,
 
   -- the language of Effects
 
-  data MEff : (m : Type -> Type) ->
+  data EffM : (m : Type -> Type) ->
               Vect EFF n -> Vect EFF n -> Type -> Type where
-       value  : a -> MEff m xs xs a
-       ebind  : MEff m xs xs' a -> (a -> MEff m xs' xs'' b) -> MEff m xs xs'' b
+       value  : a -> EffM m xs xs a
+       ebind  : EffM m xs xs' a -> (a -> EffM m xs' xs'' b) -> EffM m xs xs'' b
        effect : {a, b: _} -> {e : Effect} ->
                 {default tactics { reflect findEffElem 10; solve; } 
                   prf : EffElem e a xs} -> 
                   (eff : e a b t) -> 
-                MEff m xs (updateResTy xs prf eff) t
+                EffM m xs (updateResTy xs prf eff) t
        call   : {default tactics { reflect findSubList 10; solve; }
                    prf : SubList ys xs} ->
-                MEff m ys ys' t -> MEff m xs (updateWith ys' xs prf) t
-       (:-)   : (l : ty) -> MEff m [x] [y] t -> MEff m [l ::: x] [l ::: y] t
-       lift   : m a -> MEff m xs xs a
+                EffM m ys ys' t -> EffM m xs (updateWith ys' xs prf) t
+       (:-)   : (l : ty) -> EffM m [x] [y] t -> EffM m [l ::: x] [l ::: y] t
+       lift   : m a -> EffM m xs xs a
 
 --   Eff : List (EFF m) -> Type -> Type
 
   -- for 'do' notation
 
-  return : a -> MEff m xs xs a
+  return : a -> EffM m xs xs a
   return x = value x
 
-  (>>=) : MEff m xs xs' a -> (a -> MEff m xs' xs'' b) -> MEff m xs xs'' b
+  (>>=) : EffM m xs xs' a -> (a -> EffM m xs' xs'' b) -> EffM m xs xs'' b
   (>>=) = ebind
 
   -- for idiom brackets
 
   infixl 2 <$>
 
-  pure : Monad m => a -> MEff m xs xs a
+  pure : Monad m => a -> EffM m xs xs a
   pure = value
 
-  (<$>) : Monad m => MEff m xs xs (a -> b) -> MEff m xs xs a -> MEff m xs xs b
+  (<$>) : Monad m => EffM m xs xs (a -> b) -> EffM m xs xs a -> EffM m xs xs b
   (<$>) prog v = do fn <- prog
                     arg <- v
                     return (fn arg)
@@ -104,7 +104,7 @@ using (m : Type -> Type,
   execEff (val :: env) (There p) eff k 
       = execEff env p eff (\env', v => k (val :: env') v)
 
-  eff : Monad m => Env m xs -> MEff m xs xs' a -> (Env m xs' -> a -> m b) -> m b
+  eff : Monad m => Env m xs -> EffM m xs xs' a -> (Env m xs' -> a -> m b) -> m b
   eff env (value x) k = k env x
   eff env (prog `ebind` c) k 
      = eff env prog (\env', p' => eff env' (c p') k)
@@ -118,21 +118,21 @@ using (m : Type -> Type,
   eff env (lift act) k = do x <- act
                             k env x
 
-  run : Monad m => Env m xs -> MEff m xs xs' a -> m a
+  run : Monad m => Env m xs -> EffM m xs xs' a -> m a
   run env prog = eff env prog (\env, r => return r)
 
-syntax Eff [m] [xs] [t] = MEff m xs xs t
-syntax GenEff [xs] [a] = Monad m => MEff m xs xs a 
+syntax Eff [xs] [a] = Monad m => EffM m xs xs a 
+syntax EffT [m] [xs] [t] = EffM m xs xs t
 
 -- some higher order things
 
 mapE : Monad m => {xs : Vect EFF n} -> 
-       (a -> MEff m xs xs b) -> List a -> MEff m xs xs (List b)
+       (a -> EffM m xs xs b) -> List a -> EffM m xs xs (List b)
 mapE f []        = pure [] 
 mapE f (x :: xs) = [| f x :: mapE f xs |]
 
 when : Monad m => {xs : Vect EFF n} ->
-       Bool -> MEff m xs xs () -> MEff m xs xs ()
+       Bool -> EffM m xs xs () -> EffM m xs xs ()
 when True  e = e
 when False e = return ()
 

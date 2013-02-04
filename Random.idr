@@ -15,7 +15,7 @@ instance Monad m => Effective Random m where
 RND : EFF
 RND = MkEff Int Random
 
-rndInt : Int -> Int -> GenEff [RND] Int
+rndInt : Int -> Int -> Eff [RND] Int
 rndInt lower upper = do v <- effect getRandom 
                         return (v `mod` (upper - lower) + lower)
 

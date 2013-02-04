@@ -15,10 +15,10 @@ instance Monad m => Effective (State a) m where
 STATE : Type -> EFF
 STATE t = MkEff t (State t)
 
-get : GenEff [STATE x] x
+get : Eff [STATE x] x
 get = effect Get 
 
-put : Monad m => x -> MEff m [STATE x] [STATE x] ()
+put : Monad m => x -> EffM m [STATE x] [STATE x] ()
 put x = effect (Put x)
 
 -- Following leads to neater code, but can't be used in a HOF:
