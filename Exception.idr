@@ -37,17 +37,9 @@ instance Show a => Effective (Exception a) IO where
      runEffect _ (Raise e) k = do print e
                                   believe_me (exit 1)
 
-namespace Maybe_Exception
-  EXCEPTION : Type -> EFF Maybe
-  EXCEPTION t = MkEff () (Exception t) %instance
+EXCEPTION : Type -> EFF 
+EXCEPTION t = MkEff () (Exception t) 
 
-  raise : a -> Eff [EXCEPTION a] b
-  raise err = effect (Raise err)
-
-namespace IO_Exception
-  IO_EXCEPTION : EFF IO
-  IO_EXCEPTION = MkEff () (Exception String) %instance
-
-  io_raise : Show a => a -> Eff [IO_EXCEPTION] b
-  io_raise err = effect (Raise (show err))
+raise : a -> Eff m [EXCEPTION a] b
+raise err = effect (Raise err)
 

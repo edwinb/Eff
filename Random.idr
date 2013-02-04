@@ -12,8 +12,8 @@ instance Monad m => Effective Random m where
               = let seed' = 1664525 * seed + 1013904223 in
                     k seed' seed'
                     
-RND : Monad m => EFF m
-RND = MkEff Int Random %instance
+RND : EFF
+RND = MkEff Int Random
 
 rndInt : Int -> Int -> GenEff [RND] Int
 rndInt lower upper = do v <- effect getRandom 

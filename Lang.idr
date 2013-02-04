@@ -10,7 +10,7 @@ data Expr = Var String
           | Add Expr Expr
           | Random Int
 
-eval : Expr -> Eff [EXCEPTION String, RND, STATE (List (String, Int))] Int
+eval : Expr -> GenEff [EXCEPTION String, RND, STATE (List (String, Int))] Int
 eval (Var x) = do vs <- call get
                   case List.lookup x vs of
                         Nothing => call (raise ("No such variable " ++ x))
@@ -26,5 +26,5 @@ eval (Add l r) = [| call (eval l) + call (eval r) |]
 eval (Random upper) = do val <- call (rndInt 0 upper)
                          return val
 
-runEval : List (String, Int) -> Expr -> Maybe Int
+runEval : List (String, Int) -> Expr -> IO Int
 runEval args expr = run [(), 123456, args] (eval expr)
