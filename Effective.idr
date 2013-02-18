@@ -3,9 +3,28 @@ module Effective
 Effect : Type
 Effect = Type -> Type -> Type -> Type
 
-class Effective (e : Effect) 
-                (m : Type -> Type) where
+data EFF : Type where
+     MkEff : Type -> Effect -> EFF
+
+class Effective (e : Effect) (m : Type -> Type) where
      runEffect : res -> (eff : e res res' t) -> (res' -> t -> m a) -> m a
+
+class Catchable (m : Type -> Type) t where
+    catch : m a -> (t -> m a) -> m a
+
+
+
+
+
+
+
+
+
+
+
+
+
+---------------------
 
 using (xs : Vect a m, ys : Vect a n)
   data SubList : Vect a m -> Vect a n -> Type where
@@ -17,8 +36,8 @@ using (xs : Vect a m, ys : Vect a n)
   subListId {xs = Nil} = SubNil
   subListId {xs = x :: xs} = Keep subListId
 
-data EFF : Type where
-     MkEff : Type -> (eff : Effect) -> EFF
+effType : EFF -> Type
+effType (MkEff t _) = t
 
 using (m : Type -> Type, 
        xs : Vect EFF n, xs' : Vect EFF n, xs'' : Vect EFF n,
@@ -50,7 +69,8 @@ using (m : Type -> Type,
   rebuildEnv : {ys' : Vect _ p} ->
                Env m ys' -> (prf : SubList ys xs) -> 
                Env m xs -> Env m (updateWith ys' xs prf) 
-  rebuildEnv [] SubNil env = env
-  rebuildEnv (x :: xs) (Keep rest) (y :: env) =  x :: rebuildEnv xs rest env
-  rebuildEnv xs (Drop rest) (y :: env) = y :: rebuildEnv xs rest env
+  rebuildEnv []        SubNil      env = env
+  rebuildEnv (x :: xs) (Keep rest) (y :: env) = x :: rebuildEnv xs rest env
+  rebuildEnv xs        (Drop rest) (y :: env) = y :: rebuildEnv xs rest env
+--   rebuildEnv (x :: xs) SubNil      env impossible
 

@@ -1,6 +1,6 @@
 module State
 
-import Eff_mutable
+import Eff
 
 %access public
 

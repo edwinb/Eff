@@ -1,9 +1,8 @@
 module Exception
 
-import Eff_mutable
+import Eff
 import System
-
-%access public
+import IOExcept
 
 data Exception : Type -> Type -> Type -> Type -> Type where
      Raise : a -> Exception a () () b 
@@ -11,35 +10,44 @@ data Exception : Type -> Type -> Type -> Type -> Type where
 instance Effective (Exception a) Maybe where
      runEffect _ (Raise e) k = Nothing
 
-data IOExcept : Type -> Type where
-     ioM : IO (Maybe a) -> IOExcept a
-
-instance Functor IOExcept where
-     fmap f (ioM fn) = ioM (fmap (fmap f) fn)
-
-instance Applicative IOExcept where
-     pure x = ioM (pure (pure x))
-     (ioM f) <$> (ioM a) = ioM (do f' <- f; a' <- a
-                                   return (f' <$> a'))
-
-instance Monad IOExcept where
-     return = pure
-     (ioM x) >>= k = ioM (do x' <- x;
-                             case x' of
-                                  Just a => let (ioM ka) = k a in
-                                                ka
-                                  Nothing => return Nothing)
-     
-instance Effective (Exception a) IOExcept where
-     runEffect _ (Raise e) k = ioM (return Nothing)
-
 instance Show a => Effective (Exception a) IO where
      runEffect _ (Raise e) k = do print e
                                   believe_me (exit 1)
+
+instance Effective (Exception a) (IOExcept a) where
+     runEffect _ (Raise e) k = ioM (return (Left e))
 
 EXCEPTION : Type -> EFF 
 EXCEPTION t = MkEff () (Exception t) 
 
 raise : a -> Eff [EXCEPTION a] b
 raise err = effect (Raise err)
+
+instance Catchable Maybe () where
+    catch Nothing  h = h ()
+    catch (Just x) h = Just x
+
+instance Catchable (Either a) a where
+    catch (Left err) h = h err
+    catch (Right x)  h = (Right x)
+
+instance Catchable (IOExcept err) err where
+    catch (ioM prog) h = ioM (do p' <- prog
+                                 case p' of
+                                      Left e => let ioM he = h e in he
+                                      Right val => return (Right val))
+
+
+
+
+
+
+
+
+
+-- TODO: Catching exceptions mid program?
+-- probably need to invoke a new interpreter
+
+-- possibly add a 'handle' to the Eff language so that an alternative
+-- handler can be introduced mid interpretation?
 

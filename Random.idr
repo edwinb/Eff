@@ -1,8 +1,6 @@
 module Random
 
-import Eff_mutable
-
-%access public
+import Eff
 
 data Random : Type -> Type -> Type -> Type where
      getRandom : Random Int Int Int
