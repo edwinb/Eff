@@ -9,8 +9,8 @@ data State : Type -> Effect where
      Put : a -> State a a a ()
 
 instance Monad m => Effective (State a) m where
-     runEffect st Get       k = k st st
-     runEffect st (Put new) k = k new ()
+     runEffect st Get     k = k st st
+     runEffect st (Put n) k = k n ()
 
 STATE : Type -> EFF
 STATE t = MkEff t (State t)

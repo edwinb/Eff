@@ -101,8 +101,7 @@ using (m : Type -> Type,
 
   -- an interpreter
 
-  execEff : Monad m => {e : Effect} -> {t : Type} ->
-                       Env m xs -> (p : EffElem e res xs) -> 
+  execEff : Monad m => Env m xs -> (p : EffElem e res xs) -> 
                        (eff : e res b a) ->
                        (Env m (updateResTy xs p eff) -> a -> m t) -> m t
   execEff (val :: env) Here eff' k 
@@ -110,7 +109,8 @@ using (m : Type -> Type,
   execEff (val :: env) (There p) eff k 
       = execEff env p eff (\env', v => k (val :: env') v)
 
-  eff : Monad m => Env m xs -> EffM m xs xs' a -> (Env m xs' -> a -> m b) -> m b
+  eff : Monad m => 
+        Env m xs -> EffM m xs xs' a -> (Env m xs' -> a -> m b) -> m b
   eff env (value x) k = k env x
   eff env (prog `ebind` c) k 
      = eff env prog (\env', p' => eff env' (c p') k)
