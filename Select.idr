@@ -12,6 +12,9 @@ instance Effective Selection Maybe where
                                  Nothing => tryAll xs
                                  Just v => Just v
 
+instance Effective Selection List where
+     runEffect r (Select xs) k = concatMap (k r) xs
+     
 SELECT : EFF
 SELECT = MkEff () Selection
 

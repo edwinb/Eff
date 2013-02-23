@@ -15,10 +15,12 @@ addQueens 0   qs = return qs
 addQueens col qs = do row <- lift (select (rowsIn col qs))
                       addQueens (col - 1) ((row, col) :: qs)
 
-getQueens : Maybe (List (Int, Int))
+getQueens : List (List (Int, Int))
 getQueens = run [()] (addQueens 8 [])
 
 main : IO ()
-main = case getQueens of
-            Nothing => putStrLn "No solution"
-            Just qs => putStrLn ("Solution: " ++ show qs)
+main = do let qs = getQueens
+          let num = the Int (cast (length qs))
+          putStrLn (show num ++ " solutions:\n" ++ showAll qs)
+    where showAll [] = ""
+          showAll (x :: xs) = show x ++ "\n" ++ showAll xs 
