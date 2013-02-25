@@ -2,7 +2,7 @@ module Exception
 
 import Eff
 import System
-import IOExcept
+import Control.IOExcept
 
 data Exception : Type -> Type -> Type -> Type -> Type where
      Raise : a -> Exception a () () b 
@@ -21,32 +21,8 @@ EXCEPTION : Type -> EFF
 EXCEPTION t = MkEff () (Exception t) 
 
 raise : a -> Eff [EXCEPTION a] b
-raise err = effect (Raise err)
+raise err = Raise err
 
-instance Catchable Maybe () where
-    catch Nothing  h = h ()
-    catch (Just x) h = Just x
-
-    throw () = Nothing
-
-instance Catchable (Either a) a where
-    catch (Left err) h = h err
-    catch (Right x)  h = (Right x)
-
-    throw x = Left x
-
-instance Catchable (IOExcept err) err where
-    catch (ioM prog) h = ioM (do p' <- prog
-                                 case p' of
-                                      Left e => let ioM he = h e in he
-                                      Right val => return (Right val))
-    throw x = ioM (return (Left x))
-
-instance Catchable List () where
-    catch [] h = h ()
-    catch xs h = xs
-
-    throw () = []
 
 
 

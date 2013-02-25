@@ -45,17 +45,17 @@ FILE_IO t = MkEff t FileIO
 
 open : Effective FileIO e =>
        String -> (m : Mode) -> EffM e [FILE_IO ()] [FILE_IO (Handle m)] ()
-open f m = effect (Open f m)
+open f m = Open f m
 
 close : Effective FileIO e =>
         EffM e [FILE_IO (Handle m)] [FILE_IO ()] ()
-close = effect Close
+close = Close
 
 readLine : Effective FileIO e => EffT e [FILE_IO (Handle Read)] String
-readLine = effect ReadLine
+readLine = ReadLine
 
 writeLine : Effective FileIO e => String -> EffT e [FILE_IO (Handle Write)] ()
-writeLine str = effect (WriteLine str)
+writeLine str = WriteLine str
 
 eof : Effective FileIO e => EffT e [FILE_IO (Handle Read)] Bool
 eof = effect EOF
