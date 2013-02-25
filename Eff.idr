@@ -66,8 +66,7 @@ using (m : Type -> Type,
                   prf : EffElem e a xs} -> 
                 (eff : e a b t) -> 
                 EffM m xs (updateResTy xs prf eff) t
-       lift   : {default tactics { reflect findSubList 10; solve; }
-                   prf : SubList ys xs} ->
+       lift'  : (prf : SubList ys xs) ->
                 EffM m ys ys' t -> EffM m xs (updateWith ys' xs prf) t
        new    : Effective e m =>
                 res -> EffM m (MkEff res e :: xs) (MkEff res' e :: xs') a ->
@@ -78,6 +77,12 @@ using (m : Type -> Type,
        (:-)   : (l : ty) -> EffM m [x] [y] t -> EffM m [l ::: x] [l ::: y] t
 
 --   Eff : List (EFF m) -> Type -> Type
+
+  implicit
+  lift : {default tactics { reflect findSubList 10; solve; }
+             prf : SubList ys xs} ->
+         EffM m ys ys' t -> EffM m xs (updateWith ys' xs prf) t
+  lift {prf} e = lift' prf e
 
   -- for 'do' notation
 
@@ -115,7 +120,7 @@ using (m : Type -> Type,
   eff env (prog `ebind` c) k 
      = eff env prog (\env', p' => eff env' (c p') k)
   eff env (effect {prf} effP) k = execEff env prf effP k
-  eff env (lift {prf} effP) k 
+  eff env (lift' prf effP) k 
      = let env' = dropEnv env prf in 
            eff env' effP (\envk, p' => k (rebuildEnv envk prf env) p')
   eff env (new r prog) k

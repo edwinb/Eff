@@ -14,15 +14,19 @@ Evaluator : Type -> Type
 Evaluator t 
    = EffT IO [EXCEPTION String, RND, STATE (List (String, Int)), STDIO] t
 
+test : Evaluator Int
+test = do vs <- get
+          return 0
+
 eval : Expr -> Evaluator Int
-eval (Var x) = do vs <- lift get
+eval (Var x) = do vs <- get
                   case lookup x vs of
-                        Nothing => lift (raise ("No such variable " ++ x))
+                        Nothing => raise ("No such variable " ++ x)
                         Just val => return val
 eval (Val x) = return x
 eval (Add l r) = [| eval l + eval r |]
-eval (Random upper) = do val <- lift (rndInt 0 upper) 
-                         lift (putStrLn (show val))
+eval (Random upper) = do val <- rndInt 0 upper
+                         putStrLn (show val)
                          return val
 
 testExpr : Expr
@@ -36,4 +40,5 @@ main = do putStr "Number: "
           x <- getLine
           val <- runEval [("foo", cast x)] testExpr
           putStrLn $ "Answer: " ++ show val
-          
+
+

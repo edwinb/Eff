@@ -14,22 +14,22 @@ FileIO st t
 readFile : FileIO (Handle Read) (List String)
 readFile = readAcc [] where
     readAcc : List String -> FileIO (Handle Read) (List String) 
-    readAcc acc = do e <- lift eof
+    readAcc acc = do e <- eof
                      if (not e) 
-                        then do str <- lift readLine
-                                ls <- lift (Count :- get)
-                                lift (Count :- put (ls + 1))
+                        then do str <- readLine
+                                ls <- Count :- get
+                                Count :- put (ls + 1)
                                 readAcc (str :: acc)
                         else return (reverse acc)
 
 testFile : FileIO () () 
-testFile = catch (do lift (open "testFile" Read)
+testFile = catch (do open "testFile" Read
                      str <- readFile
-                     lift (putStrLn (show str))
-                     ls <- lift (Count :- get)
-                     lift (putStrLn (show ls))
-                     lift close)
-                 (\err => lift (putStrLn ("Handled: " ++ show err)))
+                     putStrLn (show str)
+                     ls <- Count :- get
+                     close
+                     putStrLn (show ls))
+                 (\err => putStrLn ("Handled: " ++ show err))
 
 main : IO ()
 main = do ioe_run (run [(), (), Count := 0] testFile)

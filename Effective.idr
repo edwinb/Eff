@@ -10,6 +10,7 @@ class Effective (e : Effect) (m : Type -> Type) where
      runEffect : res -> (eff : e res res' t) -> (res' -> t -> m a) -> m a
 
 class Catchable (m : Type -> Type) t where
+    throw : t -> m a
     catch : m a -> (t -> m a) -> m a
 
 
