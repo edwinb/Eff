@@ -1,6 +1,6 @@
-module State
+module Effect.State
 
-import Eff
+import Effects
 
 %access public
 

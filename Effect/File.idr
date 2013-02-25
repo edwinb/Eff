@@ -1,7 +1,7 @@
-module File
+module Effect.File
 
-import Eff
-import Exception
+import Effects
+import Control.IOExcept
 
 data Handle : Mode -> Type where
      FH : File -> Handle m

@@ -1,6 +1,6 @@
-module Random
+module Effect.Random
 
-import Eff
+import Effects
 
 data Random : Type -> Type -> Type -> Type where
      getRandom : Random Int Int Int

@@ -1,9 +1,9 @@
 module Main
 
-import State
-import Exception
-import Random
-import StdIO
+import Effect.State
+import Effect.Exception
+import Effect.Random
+import Effect.StdIO
 
 data Expr = Var String
           | Val Int

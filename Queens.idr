@@ -1,7 +1,6 @@
 module Main
 
-import Eff
-import Select
+import Effect.Select
 
 no_attack : (Int, Int) -> (Int, Int) -> Bool
 no_attack (x, y) (x', y') 

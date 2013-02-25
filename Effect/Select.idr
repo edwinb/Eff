@@ -1,6 +1,6 @@
-module Select
+module Effect.Select
 
-import Exception
+import Effects
 
 data Selection : Effect where
      Select : List a -> Selection () () a
@@ -19,5 +19,5 @@ SELECT : EFF
 SELECT = MkEff () Selection
 
 select : List a -> Eff [SELECT] a
-select xs = effect (Select xs)
+select xs = Select xs
 

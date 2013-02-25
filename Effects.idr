@@ -1,19 +1,70 @@
-module Eff
+module Effects
 
 import Language.Reflection
 import Control.Monad.Identity
-import Effective
+import Control.Catchable
 
-{- TODO:
+%access public
 
-* Make effect/lift/call etc functions to lose interpreter overhead
-* Try to find nice notation
-* Allow adding effects/handlers in the middle of a program (e.g. adding
-  exception handlers)
-* More examples: concurrency, finer grained IO, nondeterminism, partiality. 
-* Are dependent resources possible (e.g. tracking file open state)?
+---- Effects
 
--}
+Effect : Type
+Effect = Type -> Type -> Type -> Type
+
+data EFF : Type where
+     MkEff : Type -> Effect -> EFF
+
+class Effective (e : Effect) (m : Type -> Type) where
+     runEffect : res -> (eff : e res res' t) -> (res' -> t -> m a) -> m a
+
+---- Properties and proof construction
+
+using (xs : Vect a m, ys : Vect a n)
+  data SubList : Vect a m -> Vect a n -> Type where
+       SubNil : SubList {a} [] []
+       Keep   : SubList xs ys -> SubList (x :: xs) (x :: ys)
+       Drop   : SubList xs ys -> SubList xs (x :: ys)
+
+  subListId : SubList xs xs
+  subListId {xs = Nil} = SubNil
+  subListId {xs = x :: xs} = Keep subListId
+
+effType : EFF -> Type
+effType (MkEff t _) = t
+
+using (m : Type -> Type, 
+       xs : Vect EFF n, xs' : Vect EFF n, xs'' : Vect EFF n,
+       ys : Vect EFF p)
+
+  data Env  : (m : Type -> Type) -> Vect EFF n -> Type where
+       Nil  : Env m Nil
+       (::) : Effective eff m => a -> Env m xs -> Env m (MkEff a eff :: xs)
+
+  data EffElem : (Type -> Type -> Type -> Type) -> Type ->
+                 Vect EFF n -> Type where
+       Here : EffElem x a (MkEff a x :: xs)
+       There : EffElem x a xs -> EffElem x a (y :: xs)
+
+  -- make an environment corresponding to a sub-list
+  dropEnv : Env m ys -> SubList xs ys -> Env m xs
+  dropEnv [] SubNil = []
+  dropEnv (v :: vs) (Keep rest) = v :: dropEnv vs rest
+  dropEnv (v :: vs) (Drop rest) = dropEnv vs rest
+
+  updateWith : {ys : Vect a p} ->
+               (ys' : Vect a p) -> (xs : Vect a n) ->
+               SubList ys xs -> Vect a n
+  updateWith (y :: ys) (x :: xs) (Keep rest) = y :: updateWith ys xs rest
+  updateWith ys        (x :: xs) (Drop rest) = x :: updateWith ys xs rest
+  updateWith []        []        SubNil      = []
+
+  -- put things back, replacing old with new in the sub-environment
+  rebuildEnv : {ys' : Vect _ p} ->
+               Env m ys' -> (prf : SubList ys xs) -> 
+               Env m xs -> Env m (updateWith ys' xs prf) 
+  rebuildEnv []        SubNil      env = env
+  rebuildEnv (x :: xs) (Keep rest) (y :: env) = x :: rebuildEnv xs rest env
+  rebuildEnv xs        (Drop rest) (y :: env) = y :: rebuildEnv xs rest env
 
 ---- The Effect EDSL itself ----
 
@@ -49,9 +100,11 @@ using (m : Type -> Type,
   (:::) : lbl -> EFF -> EFF 
   (:::) {lbl} x (MkEff r eff) = MkEff (LRes x r) eff
 
+  private
   unlabel : {l : ty} -> Env m [l ::: x] -> Env m [x]
   unlabel {m} {x = MkEff a eff} [l := v] = [v]
 
+  private
   relabel : (l : ty) -> Env m [x] -> Env m [l ::: x]
   relabel {x = MkEff a eff} l [v] = [l := v]
 
@@ -114,6 +167,7 @@ using (m : Type -> Type,
 
   -- an interpreter
 
+  private
   execEff : Env m xs -> (p : EffElem e res xs) -> 
             (eff : e res b a) ->
             (Env m (updateResTy xs p eff) -> a -> m t) -> m t
@@ -155,13 +209,13 @@ syntax EffT [m] [xs] [t] = EffM m xs xs t
 
 -- some higher order things
 
-mapE : Monad m => {xs : Vect EFF n} -> 
+mapE : Applicative m => {xs : Vect EFF n} -> 
        (a -> EffM m xs xs b) -> List a -> EffM m xs xs (List b)
 mapE f []        = pure [] 
 mapE f (x :: xs) = [| f x :: mapE f xs |]
 
-when : Monad m => {xs : Vect EFF n} ->
+when : Applicative m => {xs : Vect EFF n} ->
        Bool -> EffM m xs xs () -> EffM m xs xs ()
 when True  e = e
-when False e = return ()
+when False e = pure ()
 

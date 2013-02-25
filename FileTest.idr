@@ -1,9 +1,9 @@
 module Main 
 
-import File
-import State
-import StdIO
-import Eff
+import Effect.File
+import Effect.State
+import Effect.StdIO
+import Control.IOExcept
 
 data FName = Count | NotCount
 

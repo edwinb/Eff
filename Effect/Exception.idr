@@ -1,6 +1,6 @@
-module Exception
+module Effect.Exception
 
-import Eff
+import Effects
 import System
 import Control.IOExcept
 
