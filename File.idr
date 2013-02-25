@@ -58,7 +58,7 @@ writeLine : Effective FileIO e => String -> EffT e [FILE_IO (Handle Write)] ()
 writeLine str = WriteLine str
 
 eof : Effective FileIO e => EffT e [FILE_IO (Handle Read)] Bool
-eof = effect EOF
+eof = EOF
 
 
 

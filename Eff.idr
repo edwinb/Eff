@@ -61,11 +61,11 @@ using (m : Type -> Type,
               Vect EFF n -> Vect EFF n -> Type -> Type where
        value   : a -> EffM m xs xs a
        ebind   : EffM m xs xs' a -> (a -> EffM m xs' xs'' b) -> EffM m xs xs'' b
-       effect' : {a, b: _} -> {e : Effect} ->
+       effect  : {a, b: _} -> {e : Effect} ->
                  (prf : EffElem e a xs) -> 
                  (eff : e a b t) -> 
                  EffM m xs (updateResTy xs prf eff) t
-       lift'   : (prf : SubList ys xs) ->
+       lift    : (prf : SubList ys xs) ->
                  EffM m ys ys' t -> EffM m xs (updateWith ys' xs prf) t
        new     : Effective e m =>
                  res -> EffM m (MkEff res e :: xs) (MkEff res' e :: xs') a ->
@@ -78,18 +78,18 @@ using (m : Type -> Type,
 --   Eff : List (EFF m) -> Type -> Type
 
   implicit
-  lift : {default tactics { reflect findSubList 10; solve; }
+  lift' : {default tactics { reflect findSubList 10; solve; }
              prf : SubList ys xs} ->
-         EffM m ys ys' t -> EffM m xs (updateWith ys' xs prf) t
-  lift {prf} e = lift' prf e
+          EffM m ys ys' t -> EffM m xs (updateWith ys' xs prf) t
+  lift' {prf} e = lift prf e
 
   implicit
-  effect : {a, b: _} -> {e : Effect} ->
-           {default tactics { reflect findEffElem 10; solve; } 
+  effect' : {a, b: _} -> {e : Effect} ->
+            {default tactics { reflect findEffElem 10; solve; } 
                prf : EffElem e a xs} -> 
-           (eff : e a b t) -> 
+            (eff : e a b t) -> 
            EffM m xs (updateResTy xs prf eff) t
-  effect {prf} e = effect' prf e
+  effect' {prf} e = effect prf e
 
 
   -- for 'do' notation
@@ -126,8 +126,8 @@ using (m : Type -> Type,
   eff env (value x) k = k env x
   eff env (prog `ebind` c) k 
      = eff env prog (\env', p' => eff env' (c p') k)
-  eff env (effect' prf effP) k = execEff env prf effP k
-  eff env (lift' prf effP) k 
+  eff env (effect prf effP) k = execEff env prf effP k
+  eff env (lift prf effP) k 
      = let env' = dropEnv env prf in 
            eff env' effP (\envk, p' => k (rebuildEnv envk prf env) p')
   eff env (new r prog) k
