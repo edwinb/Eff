@@ -200,9 +200,12 @@ using (m : Type -> Type,
   runEnv : Applicative m => Env m xs -> EffM m xs xs' a -> m (Env m xs', a)
   runEnv env prog = eff env prog (\env, r => pure (env, r))
 
-  runPure : Env Identity xs -> EffM Identity xs xs' a -> a
-  runPure env prog = case eff env prog (\env, r => return r) of
-                          Id v => v
+  runPure : Env id xs -> EffM id xs xs' a -> a
+  runPure env prog = eff env prog (\env, r => r)
+  
+  runWith : (a -> m a) -> Env m xs -> EffM m xs xs' a -> m a
+  runWith inj env prog = eff env prog (\env, r => inj r)
+
 
 syntax Eff [xs] [a] = Monad m => EffM m xs xs a 
 syntax EffT [m] [xs] [t] = EffM m xs xs t
