@@ -51,13 +51,13 @@ close : Effective FileIO e =>
         EffM e [FILE_IO (Handle m)] [FILE_IO ()] ()
 close = Close
 
-readLine : Effective FileIO e => EffT e [FILE_IO (Handle Read)] String
+readLine : Effective FileIO e => Eff e [FILE_IO (Handle Read)] String
 readLine = ReadLine
 
-writeLine : Effective FileIO e => String -> EffT e [FILE_IO (Handle Write)] ()
+writeLine : Effective FileIO e => String -> Eff e [FILE_IO (Handle Write)] ()
 writeLine str = WriteLine str
 
-eof : Effective FileIO e => EffT e [FILE_IO (Handle Read)] Bool
+eof : Effective FileIO e => Eff e [FILE_IO (Handle Read)] Bool
 eof = EOF
 
 

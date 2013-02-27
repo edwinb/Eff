@@ -12,7 +12,7 @@ data Expr = Var String
 
 Evaluator : Type -> Type
 Evaluator t 
-   = EffT IO [EXCEPTION String, RND, STATE (List (String, Int)), STDIO] t
+   = Eff IO [EXCEPTION String, RND, STATE (List (String, Int)), STDIO] t
 
 test : Evaluator Int
 test = do vs <- get

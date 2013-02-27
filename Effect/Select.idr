@@ -18,6 +18,6 @@ instance Effective Selection List where
 SELECT : EFF
 SELECT = MkEff () Selection
 
-select : List a -> Eff [SELECT] a
+select : List a -> Eff m [SELECT] a
 select xs = Select xs
 

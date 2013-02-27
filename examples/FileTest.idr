@@ -9,7 +9,7 @@ data FName = Count | NotCount
 
 FileIO : Type -> Type -> Type
 FileIO st t 
-   = EffT (IOExcept String) [FILE_IO st, STDIO, Count ::: STATE Int] t
+   = Eff (IOExcept String) [FILE_IO st, STDIO, Count ::: STATE Int] t
 
 readFile : FileIO (Handle Read) (List String)
 readFile = readAcc [] where

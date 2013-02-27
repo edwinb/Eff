@@ -20,7 +20,7 @@ instance Effective (Exception a) (IOExcept a) where
 EXCEPTION : Type -> EFF 
 EXCEPTION t = MkEff () (Exception t) 
 
-raise : a -> Eff [EXCEPTION a] b
+raise : a -> Eff m [EXCEPTION a] b
 raise err = Raise err
 
 

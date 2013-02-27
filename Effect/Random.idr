@@ -14,7 +14,7 @@ using (m : Type -> Type)
 RND : EFF
 RND = MkEff Int Random
 
-rndInt : Int -> Int -> Eff [RND] Int
+rndInt : Int -> Int -> Eff m [RND] Int
 rndInt lower upper = do v <- getRandom 
                         return (v `mod` (upper - lower) + lower)
 

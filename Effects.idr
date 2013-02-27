@@ -1,7 +1,6 @@
 module Effects
 
 import Language.Reflection
-import Control.Monad.Identity
 import Control.Catchable
 
 %access public
@@ -207,8 +206,10 @@ using (m : Type -> Type,
   runWith inj env prog = eff env prog (\env, r => inj r)
 
 
-syntax Eff [xs] [a] = Monad m => EffM m xs xs a 
-syntax EffT [m] [xs] [t] = EffM m xs xs t
+-- syntax EffT [m] [xs] [t] = EffM m xs xs t
+
+Eff : (Type -> Type) -> Vect EFF n -> Type -> Type
+Eff m xs t = EffM m xs xs t
 
 -- some higher order things
 

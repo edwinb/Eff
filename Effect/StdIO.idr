@@ -41,17 +41,17 @@ instance Effective StdIO IOStream where
 STDIO : EFF
 STDIO = MkEff () StdIO
 
-putStr : Effective StdIO e => String -> EffT e [STDIO] ()
+putStr : Effective StdIO e => String -> Eff e [STDIO] ()
 putStr s = PutStr s
 
-putStrLn : Effective StdIO e => String -> EffT e [STDIO] ()
+putStrLn : Effective StdIO e => String -> Eff e [STDIO] ()
 putStrLn s = putStr (s ++ "\n")
 
-getStr : Effective StdIO e => EffT e [STDIO] String
+getStr : Effective StdIO e => Eff e [STDIO] String
 getStr = GetStr
 
 mkStrFn : {xs : Vect EFF n} ->
-          EffT IOStream xs a -> Env IOStream xs -> 
+          Eff IOStream xs a -> Env IOStream xs -> 
           List String -> (a, List String)
 mkStrFn {a} p env input = case mkStrFn' of
                                MkStream f => f input
