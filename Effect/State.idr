@@ -9,9 +9,9 @@ data State : Type -> Effect where
      Put : a -> State a a a ()
 
 using (m : Type -> Type)
-  instance Effective (State a) m where
-     runEffect st Get     k = k st st
-     runEffect st (Put n) k = k n ()
+  instance Handler (State a) m where
+     handle st Get     k = k st st
+     handle st (Put n) k = k n ()
 
 STATE : Type -> EFF
 STATE t = MkEff t (State t)

@@ -11,9 +11,9 @@ FileIO : Type -> Type -> Type
 FileIO st t 
    = Eff (IOExcept String) [FILE_IO st, STDIO, Count ::: STATE Int] t
 
-readFile : FileIO (Handle Read) (List String)
+readFile : FileIO (OpenFile Read) (List String)
 readFile = readAcc [] where
-    readAcc : List String -> FileIO (Handle Read) (List String) 
+    readAcc : List String -> FileIO (OpenFile Read) (List String) 
     readAcc acc = do e <- eof
                      if (not e) 
                         then do str <- readLine

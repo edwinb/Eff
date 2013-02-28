@@ -13,8 +13,8 @@ Effect = Type -> Type -> Type -> Type
 data EFF : Type where
      MkEff : Type -> Effect -> EFF
 
-class Effective (e : Effect) (m : Type -> Type) where
-     runEffect : res -> (eff : e res res' t) -> (res' -> t -> m a) -> m a
+class Handler (e : Effect) (m : Type -> Type) where
+     handle : res -> (eff : e res res' t) -> (res' -> t -> m a) -> m a
 
 ---- Properties and proof construction
 
@@ -30,7 +30,7 @@ using (xs : List a, ys : List a)
 
 data Env  : (m : Type -> Type) -> List EFF -> Type where
      Nil  : Env m Nil
-     (::) : Effective eff m => a -> Env m xs -> Env m (MkEff a eff :: xs)
+     (::) : Handler eff m => a -> Env m xs -> Env m (MkEff a eff :: xs)
 
 data EffElem : (Type -> Type -> Type -> Type) -> Type ->
                List EFF -> Type where
@@ -106,7 +106,7 @@ data EffM : (m : Type -> Type) ->
                EffM m xs (updateResTy xs prf eff) t
      lift    : (prf : SubList ys xs) ->
                EffM m ys ys' t -> EffM m xs (updateWith ys' xs prf) t
-     new     : Effective e m =>
+     new     : Handler e m =>
                res -> EffM m (MkEff res e :: xs) (MkEff res' e :: xs') a ->
                EffM m xs xs' a
      catch   : Catchable m err =>
@@ -158,7 +158,7 @@ execEff : Env m xs -> (p : EffElem e res xs) ->
           (eff : e res b a) ->
           (Env m (updateResTy xs p eff) -> a -> m t) -> m t
 execEff (val :: env) Here eff' k 
-    = runEffect val eff' (\res, v => k (res :: env) v)
+    = handle val eff' (\res, v => k (res :: env) v)
 execEff (val :: env) (There p) eff k 
     = execEff env p eff (\env', v => k (val :: env') v)
 

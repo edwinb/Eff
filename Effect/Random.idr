@@ -6,8 +6,8 @@ data Random : Type -> Type -> Type -> Type where
      getRandom : Random Int Int Int
 
 using (m : Type -> Type)
-  instance Effective Random m where
-     runEffect seed getRandom k
+  instance Handler Random m where
+     handle seed getRandom k
               = let seed' = 1664525 * seed + 1013904223 in
                     k seed' seed'
                     

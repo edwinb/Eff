@@ -10,15 +10,14 @@ data Expr = Var String
           | Add Expr Expr
           | Random Int
 
-Evaluator : Type -> Type
-Evaluator t 
-   = Eff IO [EXCEPTION String, RND, STATE (List (String, Int)), STDIO] t
+Env : Type
+Env = List (String, Int)
 
-test : Evaluator Int
-test = do vs <- get
-          return 0
+-- Evaluator : Type -> Type
+-- Evaluator t 
+--    = Eff m [EXCEPTION String, RND, STATE Env] t
 
-eval : Expr -> Evaluator Int
+eval : Expr -> Eff m [EXCEPTION String, RND, STATE Env] Int
 eval (Var x) = do vs <- get
                   case lookup x vs of
                         Nothing => raise ("No such variable " ++ x)
@@ -26,14 +25,14 @@ eval (Var x) = do vs <- get
 eval (Val x) = return x
 eval (Add l r) = [| eval l + eval r |]
 eval (Random upper) = do val <- rndInt 0 upper
-                         putStrLn (show val)
+--                          putStrLn (show val)
                          return val
 
 testExpr : Expr
 testExpr = Add (Add (Var "foo") (Val 42)) (Random 100)
 
 runEval : List (String, Int) -> Expr -> IO Int
-runEval args expr = run [(), 123456, args, ()] (eval expr)
+runEval args expr = run [(), 123456, args] (eval expr)
 
 main : IO ()
 main = do putStr "Number: "

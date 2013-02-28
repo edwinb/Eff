@@ -3,61 +3,61 @@ module Effect.File
 import Effects
 import Control.IOExcept
 
-data Handle : Mode -> Type where
-     FH : File -> Handle m
+data OpenFile : Mode -> Type where
+     FH : File -> OpenFile m
 
 data FileIO : Effect where
-     Open  : String -> (m : Mode) -> FileIO () (Handle m) ()
-     Close :                         FileIO (Handle m) () ()
+     Open  : String -> (m : Mode) -> FileIO () (OpenFile m) ()
+     Close :                         FileIO (OpenFile m) () ()
 
-     ReadLine  :           FileIO (Handle Read)  (Handle Read) String
-     WriteLine : String -> FileIO (Handle Write) (Handle Write) ()
-     EOF       :           FileIO (Handle Read)  (Handle Read) Bool
+     ReadLine  :           FileIO (OpenFile Read)  (OpenFile Read) String
+     WriteLine : String -> FileIO (OpenFile Write) (OpenFile Write) ()
+     EOF       :           FileIO (OpenFile Read)  (OpenFile Read) Bool
 
-instance Effective FileIO IO where
-    runEffect () (Open fname m) k = do h <- openFile fname m
-                                       k (FH h) ()
-    runEffect (FH h) Close      k = do closeFile h
-                                       k () ()
-    runEffect (FH h) ReadLine        k = do str <- fread h
-                                            k (FH h) str
-    runEffect (FH h) (WriteLine str) k = do fwrite h str
-                                            k (FH h) ()
-    runEffect (FH h) EOF             k = do e <- feof h
-                                            k (FH h) e
+instance Handler FileIO IO where
+    handle () (Open fname m) k = do h <- openFile fname m
+                                    k (FH h) ()
+    handle (FH h) Close      k = do closeFile h
+                                    k () ()
+    handle (FH h) ReadLine        k = do str <- fread h
+                                         k (FH h) str
+    handle (FH h) (WriteLine str) k = do fwrite h str
+                                         k (FH h) ()
+    handle (FH h) EOF             k = do e <- feof h
+                                         k (FH h) e
 
-instance Effective FileIO (IOExcept String) where
-    runEffect () (Open fname m) k 
+instance Handler FileIO (IOExcept String) where
+    handle () (Open fname m) k 
        = do h <- ioe_lift (openFile fname m)
             valid <- ioe_lift (validFile h)
             if valid then k (FH h) ()
                      else ioe_fail "File open failed"
-    runEffect (FH h) Close           k = do ioe_lift (closeFile h); k () ()
-    runEffect (FH h) ReadLine        k = do str <- ioe_lift (fread h)
-                                            k (FH h) str
-    runEffect (FH h) (WriteLine str) k = do ioe_lift (fwrite h str)
-                                            k (FH h) ()
-    runEffect (FH h) EOF             k = do e <- ioe_lift (feof h)
-                                            k (FH h) e
+    handle (FH h) Close           k = do ioe_lift (closeFile h); k () ()
+    handle (FH h) ReadLine        k = do str <- ioe_lift (fread h)
+                                         k (FH h) str
+    handle (FH h) (WriteLine str) k = do ioe_lift (fwrite h str)
+                                         k (FH h) ()
+    handle (FH h) EOF             k = do e <- ioe_lift (feof h)
+                                         k (FH h) e
 
 FILE_IO : Type -> EFF
 FILE_IO t = MkEff t FileIO 
 
-open : Effective FileIO e =>
-       String -> (m : Mode) -> EffM e [FILE_IO ()] [FILE_IO (Handle m)] ()
+open : Handler FileIO e =>
+       String -> (m : Mode) -> EffM e [FILE_IO ()] [FILE_IO (OpenFile m)] ()
 open f m = Open f m
 
-close : Effective FileIO e =>
-        EffM e [FILE_IO (Handle m)] [FILE_IO ()] ()
+close : Handler FileIO e =>
+        EffM e [FILE_IO (OpenFile m)] [FILE_IO ()] ()
 close = Close
 
-readLine : Effective FileIO e => Eff e [FILE_IO (Handle Read)] String
+readLine : Handler FileIO e => Eff e [FILE_IO (OpenFile Read)] String
 readLine = ReadLine
 
-writeLine : Effective FileIO e => String -> Eff e [FILE_IO (Handle Write)] ()
+writeLine : Handler FileIO e => String -> Eff e [FILE_IO (OpenFile Write)] ()
 writeLine str = WriteLine str
 
-eof : Effective FileIO e => Eff e [FILE_IO (Handle Read)] Bool
+eof : Handler FileIO e => Eff e [FILE_IO (OpenFile Read)] Bool
 eof = EOF
 
 
