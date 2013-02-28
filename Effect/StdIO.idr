@@ -50,8 +50,7 @@ putStrLn s = putStr (s ++ "\n")
 getStr : Effective StdIO e => Eff e [STDIO] String
 getStr = GetStr
 
-mkStrFn : {xs : Vect EFF n} ->
-          Eff IOStream xs a -> Env IOStream xs -> 
+mkStrFn : Eff IOStream xs a -> Env IOStream xs -> 
           List String -> (a, List String)
 mkStrFn {a} p env input = case mkStrFn' of
                                MkStream f => f input
