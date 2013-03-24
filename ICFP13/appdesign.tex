@@ -1,0 +1,138 @@
+\section{Example: An Imperative Language Interpreter}
+
+\begin{SaveVerbatim}{impexpr}
+
+data Expr : Vect Ty n -> Ty -> Type where
+     Val : interpTy a -> Expr G a
+     Var : HasType i G t -> Expr G t
+     Op  : (interpTy a -> interpTy b -> interpTy c) ->
+            Expr G a -> Expr G b -> Expr G c
+
+\end{SaveVerbatim}
+\useverb{impexpr}
+
+\begin{SaveVerbatim}{impenv}
+
+data Env : Vect Ty n -> Type where
+     Nil  : Env Nil
+     (::) : interpTy a -> Env G -> Env (a :: G)
+
+\end{SaveVerbatim}
+\useverb{impenv}
+
+\begin{SaveVerbatim}{evalimp}
+
+eval : Expr G t -> Eff m [STATE (Env G)] (interpTy t)
+eval (Val x) = return x
+eval (Var i) = do env <- get
+                  return (lookup i env) 
+eval (Op op x y) = [| op (eval x) (eval y) |]
+
+\end{SaveVerbatim}
+\useverb{evalimp}
+
+\begin{SaveVerbatim}{impprog}
+
+data Imp    : Vect Ty n -> Ty -> Type where
+     Let    : Expr G t -> Imp (t :: G) u -> Imp G u
+     (:=)   : HasType i G t -> Expr G t -> Imp G t
+     Print  : Expr G TyInt -> Imp G TyUnit
+
+     For    : Imp G i -> -- initialise
+              Imp G TyBool -> -- test
+              Imp G x -> -- increment
+              Imp G t -> -- body
+              Imp G TyUnit
+
+     (>>=)  : Imp G a -> 
+              (interpTy a -> Imp G b) -> Imp G b 
+     Return : Expr G t -> Imp G t
+
+\end{SaveVerbatim}
+\useverb{impprog}
+
+\begin{SaveVerbatim}{interpimp}
+
+interp : Imp G t -> 
+         Eff IO [STDIO, STATE (Env G)] (interpTy t)
+
+\end{SaveVerbatim}
+\useverb{interpimp}
+
+For interpreting \texttt{Let}, we update the environment (but it had better
+be the right update or the recursive call to interpret the scope won't work!).
+
+\begin{SaveVerbatim}{interplet}
+
+interp (Let e sc) 
+     = do e' <- eval e
+          env <- get
+          putM (e' :: env)
+          res <- interp sc
+          (_ :: env') <- get
+          putM env'
+          return res
+\end{SaveVerbatim}
+\useverb{interplet}
+
+Wherever we call \texttt{eval}, even though it doesn't use the full set of
+effects, we can just call it directly.
+
+\begin{SaveVerbatim}{interpassign}
+
+interp (v := val) 
+     = do val' <- eval val
+          update (\env => update v env val')
+          return val'
+
+\end{SaveVerbatim}
+\useverb{interpassign}
+
+\begin{SaveVerbatim}{forloop}
+
+interp (For init test inc body)
+     = do interp init; forLoop 
+  where forLoop = do tval <- interp test
+                     if (not tval) 
+                        then return ()
+                        else do interp body
+                                interp inc
+                                forLoop 
+
+\end{SaveVerbatim}
+\useverb{forloop}
+
+
+Remaining operations, Print, return and bind, are straightforward.
+Using DSL notation~\cite{Brady2012} and implicit syntax, we can even make
+the language look like a real imperative language:
+
+\begin{SaveVerbatim}{countprog}
+
+dsl imp
+    let = Let
+    variable = id
+    index_first = stop
+    index_next = pop
+
+implicit MkImp : Expr G t -> Imp G t
+MkImp = Return
+
+count : Imp [] TyUnit
+count = imp (do let x = 0
+                For (x := 0) (x < 10) (x := x + 1)
+                    (Print (x + 1)))
+
+\end{SaveVerbatim}
+\useverb{countprog}
+
+The main program sets up the initial resources, then 
+
+\begin{SaveVerbatim}{mainprog}
+
+main : IO ()
+main = run [(), []] (interp count)
+
+\end{SaveVerbatim}
+\useverb{mainprog}
+

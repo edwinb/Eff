@@ -1,0 +1,62 @@
+\section{Related Work}
+
+DDC, Frank, Koka, Eff~\cite{Bauer}.
+
+Unlike these other implementations, rather than building a language around
+an algebraic effect system, we have taken the theory of algebraic effects and
+implemented it directly in a general purpose programming language.
+
+Relationship with monad transformers.  Earlier PADL work~\cite{bradyresource}.
+
+Xi, imperative programming with dependent types~\cite{Xi2000}.
+Typestate?~\cite{Strom1986,Aldrich2009}
+
+(Point about typestate and effects: there are languages built around these
+concepts.  We have done neither, but built a language flexible enough to
+capture the same concepts.)
+
+Theoretical work on effects: Plotkin, Power, Kammar, etc. Free monads?
+
+\section{Conclusions}
+
+Strengths: monad transformers not needed. Lift automatic, can permute effects
+without need to change program. Flexibility. Easy to read and write.
+Other effects we should be able to support --- parsing, logging, and in particular
+it will be possible to have fine-grained separation of systems effects, e.g.
+we can be precise about needing network support, CGI, graphics, OS
+environment, etc, rather than throwing it all into one IO monad.
+
+We can still use the monadic implementations we know and love --- effects work
+\remph{with} monads rather than against them, and indeed effectful programs
+are (or at least can be) translated to monadic programs in the end. So things
+which need to be monads still can be --- important since not every monad
+can be translated to an effect.
+
+Weaknesses: doesn't capture all monads (is this a weakness or just an
+observation?). Small interpreter overhead, but could be erased either with
+partial evaluation~\cite{Brady2010} or, possibly better, a finally
+tagless approach~\cite{Carette2009}. Also need to ensure that the elaborator
+can handle large programs --- it has to do a lot of work.
+
+Mixing control and resource effects is still a bit awkward --- can't yet
+thread state through all branches of a non-deterministic search, for example.
+If we could do this, could possibly support co-operative multithreading with
+shared state.
+
+\subsection{Further Work}
+
+See if it works in practice, then efficiency --- partial evaluation as in
+~\cite{Brady2010} is not quite enough, but using case operators rather
+than pattern matching ought to make it enough.
+
+Another weakness to address --- representation of sublists requires ordering
+to be preserved. It's easy to fix, since permuting a list is easy, but it
+would be nice to be automatic.
+
+Possibly making handle more flexible so that it can allow resources to interact
+--- say, supporting shared state in co-operative multithreading.
+
+What about doing this in Haskell? Recent type system extensions, plus type
+classes for automatic proof construction. Do we really need monad transformers
+for combining effects any more?
+

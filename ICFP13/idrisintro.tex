@@ -1,0 +1,319 @@
+\section{Programming in \Idris{}}
+
+\label{sect:idris}
+
+\Idris{} is a pure functional programming language with \remph{dependent
+types}. It is eagerly evaluated by default (though programs may be annotated
+for laziness) and compiled.  Like modern Haskell, it supports multi-parameter
+type classes, though these are intended primarily for overloading. The syntax
+is based heavily on Haskell, with the exception that a single colon is used for
+a type declaration and a double colon for list construction, emphasising the
+importance of types.  High level syntactic sugar includes support for
+\texttt{where} clauses, \texttt{do}-notation, monad comprehensions and idiom
+brackets~\cite{McBride2007}. In this section, we briefly discuss the language
+features we will use in this paper, in particular support for tactic
+based theorem proving and implicit syntax for assisting with 
+embedded domain specific language construction. A detailed tutorial
+is available elsewhere~\cite{idristutorial}.
+
+%Very brief intro, needs to cover \texttt{Vect}, membership predicates, simple
+%theorem proving and tactic reflection, default implicit arguments and implicit
+%conversions.  Also (maybe) named classes to show how multiple handlers can be
+%created.  A full tutorial is available elsewhere~\cite{idristutorial}.
+
+\subsection{Types and functions}
+
+Data types are declared in a similar way to Haskell data types, with a similar
+syntax. Natural numbers and lists, for example, are declared as follows in the
+library:
+
+\begin{SaveVerbatim}{natlist}
+
+data Nat    = O   | S Nat           
+data List a = Nil | (::) a (List a) 
+
+\end{SaveVerbatim}
+\useverb{natlist}
+
+A standard example of a \remph{dependent} type is the type of ``lists with
+length'', conventionally called ``vectors'' in the dependently typed
+programming literature. In \Idris{}, vectors are declared as follows:
+
+\begin{SaveVerbatim}{vect}
+
+data Vect : Type -> Nat -> Type where
+   Nil  : Vect a O
+   (::) : a -> Vect a k -> Vect a (S k)
+
+\end{SaveVerbatim}
+\useverb{vect}
+
+\noindent
+Note that this uses the same constructor names as for \texttt{List}. Ad-hoc name
+overloading such as this is accepted by \Idris{}, provided that the names are
+declared in different namespaces (in practice, normally in different modules)
+so that the names are different internally. Namespace resolution can be made
+explicitly (e.g. \texttt{List.Nil} or \texttt{Vect.Nil}) or more commonly
+by type.
+
+Syntactic sugar is provided for lists, with the notation \texttt{[a,b]}
+expanding to \texttt{a :: b :: Nil}. Name overloading means that this
+sugar applies to \remph{any} type using the constructors \texttt{Nil}
+and \texttt{(::)}.
+
+Functions are defined by pattern matching. A function over a dependent type
+naturally expresses in its type some invariants properties of that function.
+For example, appending two vectors expresses the invariant that the output
+length is the sum of the input lengths:
+
+\begin{SaveVerbatim}{vappend}
+
+(++) : Vect a n -> Vect a m -> Vect a (n + m)
+Nil       ++ ys = ys
+(x :: xs) ++ ys = x :: xs ++ ys
+
+\end{SaveVerbatim}
+\useverb{vappend}
+
+\noindent
+Expressions may be evaluated at the \Idris{} prompt, which provides a 
+read-eval-print loop with GHCI-style commands. For example:
+
+\begin{SaveVerbatim}{irepl}
+
+Idris> show ([1, 2, 3] ++ [4, 5, 6])
+"[1, 2, 3, 4, 5, 6]" : String
+
+\end{SaveVerbatim}
+\useverb{irepl}
+
+\subsection{Tactic-based theorem proving}
+
+\Idris{} supports Coq-style tactic based theorem proving~\cite{Bertot2004}
+although presently the range of available tactics is limited. Tactic scripts
+may be given using the \texttt{:p} command at the \Idris{} prompt, or directly
+in a program. For example, the following program proves that \texttt{n + O = n}
+for all \texttt{n}, using a combination of pattern matching and tactics:
+
+\begin{SaveVerbatim}{plusnOprf}
+
+plus_nO : (n : Nat) -> n + O = n
+plus_nO O     = refl
+plus_nO (S k) = let indH = plus_nO k in ?pnO_Scase
+
+plus_theorem.pnO_Scase = proof {
+  compute; intros;
+  rewrite indH; trivial;
+}
+
+\end{SaveVerbatim}
+\useverb{plusnOprf}
+
+\noindent
+The notation \texttt{?pnO\_Scase} introduces a \remph{metavariable} with the
+proof postponed until later. This proof is given using a tactic script introduced
+by the keyword \texttt{proof}.
+
+\subsection{Generating tactics}
+
+It is also possible to write programs which \remph{compute} tactics, introducing
+limited support for automated proof construction. Tactics are represented
+as follows:
+
+\begin{SaveVerbatim}{tactic}
+
+data Tactic 
+     = Try Tactic Tactic | Refine TTName
+     | Seq Tactic Tactic | Trivial 
+     | GoalType TTName Tactic | Exact TT | Solve
+
+\end{SaveVerbatim}
+\useverb{tactic}
+
+\noindent
+This includes the primitive tactics \texttt{Refine} (which attempts to make
+progress by applying a function), \texttt{Trivial} (which attempts to solve
+a goal by reflexivity or by finding a definition in the context), and
+\texttt{Exact} (which attempts to solve a goal by providing an exact proof).
+There are combinators \texttt{Try} (which applies its first argument, and if that
+fails applies its second argument), \texttt{Seq} (which applies two
+tactics in sequence) and \texttt{GoalType} (which applies a tactic only if the
+goal is a specific type). Finally, \texttt{Solve} is used to close a goal
+when a sub-proof is complete --- in \texttt{proof} scripts such as that used
+to prove \texttt{plus\_nO} the \texttt{Solve} tactic is applied automatically
+to close all subgoals.
+
+In proof mode, the tactic \texttt{reflect t} applies the constructed tactic
+\texttt{t}, provided that \texttt{t} has type \texttt{Tactic}. Full details
+of tactic based theorem proving, including details of the \texttt{Solve}
+mechanism, are described elsewhere~\cite{Brady2013} and
+beyond the scope of this paper, although
+we will be using basic tactic construction to construct simple list membership
+proofs automatically.
+
+\subsection{Implicit syntax}
+
+\subsubsection{Arguments}
+
+Let us inspect the type of \texttt{(++)} more closely:
+
+\begin{SaveVerbatim}{appendtype}
+
+(++) : Vect a n -> Vect a m -> Vect a (n + m)
+
+\end{SaveVerbatim}
+\useverb{appendtype}
+
+\noindent
+It takes two arguments, being the lists to append. However, there are also
+three names, \texttt{a}, \texttt{n} and \texttt{m} which are not bound
+explicitly. These are \remph{implicit arguments} to \texttt{(++)}. The
+type could also be written as:
+
+\begin{SaveVerbatim}{appendtypeimpl}
+
+(++) : {a : Type} -> {n : Nat} -> {m : Nat} ->
+       Vect a n -> Vect a m -> Vect a (n + m)
+
+\end{SaveVerbatim}
+\useverb{appendtypeimpl}
+
+\noindent
+This gives bindings for \texttt{a}, \texttt{n} and \texttt{m}. Implicit
+arguments, given in braces \texttt{\{\}} in the type signature, are not
+given in applications of \texttt{(++)}; their values can be inferred 
+by unification from the types of the two explicit arguments. Implicit arguments
+may be given explicitly in applications using the syntax \texttt{\{a=value\}},
+for example:
+
+\begin{SaveVerbatim}{appendexpl}
+
+(++) {a=Int} {n=2} {m=3} [1,2] [3,4,5]
+
+\end{SaveVerbatim}
+\useverb{appendexpl}
+
+\noindent
+In this context, \texttt{\{a\}} is a shorthand for \texttt{\{a=a\}}. In
+general, implicit arguments in applications are solved by unification. However,
+unification may not be strong enough.
+In other situations, it may be possible to infer arguments not by unification
+but by providing a tactic for automatic proof construction.
+For example, the following definition of \texttt{head} which requires a proof
+that the list is non-empty
+
+\begin{SaveVerbatim}{safehead}
+
+isCons : List a -> Bool
+isCons [] = False
+isCons (x :: xs) = True
+
+head : (xs : List a) -> (isCons xs = True) -> a
+head (x :: xs) _ = x
+
+\end{SaveVerbatim}
+\useverb{safehead} 
+
+\noindent
+If the list is statically known to be non-empty, either because its value is
+known or because a proof already exists in the context, the proof can be
+constructed automatically. 
+Default implicit arguments allow this to happen silently. We define
+\texttt{head} as follows:
+
+\begin{SaveVerbatim}{defimp}
+
+head : (xs : List a) -> 
+       {default proof { trivial; } 
+            p : isCons xs = True} -> a
+head (x :: xs) = x
+
+\end{SaveVerbatim}
+\useverb{defimp} 
+
+\noindent
+The syntax \texttt{\{default val x : t\}} declares an implicit argument
+\texttt{x} of type \texttt{t}, where if an explicit value is not given,
+the value \texttt{val} is inserted.
+Now when \texttt{head} is applied, the proof can be omitted. In the case that a
+proof is not found, it can be provided explicitly as normal:
+
+\begin{SaveVerbatim}{headapp}
+
+head xs {p = ?headProof} 
+
+\end{SaveVerbatim}
+\useverb{headapp} 
+
+[FIXME: It's not very satisfying that we use \texttt{tactics} here and
+\texttt{proof} earlier, even though there is a technical reason to do so.]
+
+\subsubsection{Conversions}
+
+\Idris{} supports the creation of \emph{implicit conversions}, which allow
+automatic conversion of values from one type to another when required to make
+a term type correct. This is intended to increase convenience and reduce
+verbosity in implemented embedded domain specific languages. 
+For example, imagine a fragment of a typed DSL with string values and
+a print operation:
+
+\begin{SaveVerbatim}{exprstr}
+
+data DSL    : Type -> Type where
+     StrVal : String -> DSL String
+     Print  : DSL String -> DSL ()
+     ...
+
+\end{SaveVerbatim}
+\useverb{exprstr}
+
+\noindent
+When constructing a \texttt{Print} with a literal string, we must inject
+a literal string into the \texttt{DSL} structure, as follows:
+
+\begin{SaveVerbatim}{exprimpl1}
+
+Print (StrVal "Hello") 
+
+\end{SaveVerbatim}
+\useverb{exprimpl1}
+
+\noindent
+When implementing \remph{embedded} DSLs, which we expect a programming to use
+directly, this is unsatisfying --- it creates noise both for the reader and
+the author of the program. To alleviate this problem, we have introduced
+implicit conversions to \Idris{}, inspired by a similar feature in
+Scala~\cite{Scala}:
+
+\begin{SaveVerbatim}{exprstrimpl}
+
+implicit MkStrVal : String -> DSL String
+MkStrVal = StrVal
+
+\end{SaveVerbatim}
+\useverb{exprstrimpl}
+
+\noindent
+The effect of the \texttt{implicit} keyword before the \texttt{MkStrVal}
+function is that the function will be applied to any expression of type
+\texttt{String} where an expression of type \texttt{DSL String} is required
+instead. This allows the above \texttt{Print} application to be written
+as follows:
+
+\useverb{exprstrimpl}
+
+\begin{SaveVerbatim}{exprimpl2}
+
+Print "Hello"
+
+\end{SaveVerbatim}
+\useverb{exprimpl2}
+
+\noindent
+Such conversions are, deliberately, limited. They cannot be chained, unlike
+implicit coercions in Coq, to avoid coherence problems. Furthermore, to avoid
+ambiguity problems, if there is more than one implicit conversion available
+then \remph{neither} will be applied.
+
+
+

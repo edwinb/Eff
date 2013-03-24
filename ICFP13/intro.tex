@@ -1,0 +1,56 @@
+\section{Introduction}
+
+Problem: monads for effects, but monads don't compose nicely. Standard
+solution is monad transformers, but get unwieldy quickly. No motivation
+for separating effects, state, etc.
+
+Algebraic effects and handlers seem a nice solution to effect handling
+problem. Not equivalent to monad transformers, but is that a problem?
+
+We create a language of algebraic effects, and make an extensible interpreter
+for that language which translates into some underlying monad (so, in a way,
+creating the ultimate monad transformer). 
+Extensible, because we can add new effects, and handle them differently 
+according to the needs of the underlying monad.
+
+We show: the effect DSL. How to create effects, how to combine effects and
+how some simple automated theorem proving makes this work.
+
+\subsection{Contributions}
+
+\begin{itemize}
+\item An embedded DSL for capturing fine grained \emph{algebraic effects}, in
+such a way that they are easily composable, and translatable to a variety of
+underlying monads using \emph{effect handlers}.
+\item An extension of the DSL for tracking the \emph{state} of resources
+associated with effects, such as whether a file handle is open or a network
+socket is ready to receive data.
+\item A collection of example effects (State, File, Console I/O, Exceptions,
+Random numbers, non-determinism\ldots) and handlers and their
+relationship with monads and monad transformers.
+\item A more complex example: using effects and handlers to implement
+precisely typed bindings for an external API. [Don't know what this will be
+yet\ldots]
+\end{itemize}
+
+The library makes essential use of \emph{dependent types}, firstly to verify
+that a specific effect is available to an effectful program, and secondly
+to track the state of a resource by updating its type during program
+execution.
+
+[Idea: We can use the ability to implement different handlers to make
+unit tests for interactive programs. Worth doing? Also, possibly, reasoning
+about effectful programs.]
+
+\subsection{Outline}
+
+Possible structure:
+
+\begin{itemize}
+\item Monad transformers and why they don't compose nicely
+\item Motivating example in \Idris{}
+\item How to use it, how to create effects
+\item How it works
+\item Bigger example (CGI?)
+\end{itemize}
+

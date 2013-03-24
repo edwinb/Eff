@@ -1,0 +1,778 @@
+\section{\Eff{}: an Embedded DSL for Effects Management} 
+
+\subsection{Programming with effects}
+
+\begin{SaveVerbatim}{efftype}
+
+Eff  : (m : Type -> Type) -> List EFFECT -> Type -> Type
+
+\end{SaveVerbatim}
+\useverb{efftype}
+
+\begin{SaveVerbatim}{effs}
+
+STATE     : Type -> EFFECT
+EXCEPTION : Type -> EFFECT
+STDIO     : EFFECT
+FILEIO    : Type -> EFFECT
+RND       : EFFECT
+
+\end{SaveVerbatim}
+\useverb{effs}
+
+A program with some integer state, which performs console I/O 
+and which could throw
+an exception of type \texttt{Error} might have the following type:
+
+\begin{SaveVerbatim}{exprog}
+
+example : Eff IO [EXCEPTION Error, STDIO, STATE Int] ()
+
+\end{SaveVerbatim}
+\useverb{exprog}
+
+More generally, a program might modify the set of effects available. This
+might be desirable for several reasons, such as wanting to add a new effect
+such as a new global state variable, or to update an index of a dependently
+typed state:
+
+\begin{SaveVerbatim}{effmtype}
+
+EffM : (m : Type -> Type) -> 
+       List EFFECT -> List EFFECT -> Type -> Type
+
+\end{SaveVerbatim}
+
+\useverb{effmtype}
+
+\subsubsection{First example: State}
+
+
+\begin{SaveVerbatim}{treedef}
+
+data Tree a = Leaf 
+            | Node (Tree a) a (Tree a)
+
+\end{SaveVerbatim}
+\useverb{treedef}
+
+\begin{SaveVerbatim}{treelbl}
+
+tag : Tree a -> Eff m [STATE Int] (Tree (Int, a))
+tag Leaf = return Leaf
+tag (Node l x r) 
+     = do l' <- tag l
+          lbl <- get
+          put (lbl + 1)
+          r' <- tag r
+          return (Node l' (lbl, x) r')
+
+\end{SaveVerbatim}
+\useverb{treelbl}
+
+\noindent
+In the type, we list the available effects. In this case, we are allowed
+to carry a single state. The \Eff{}
+language ensures, statically, that any effectful functions which are called
+(\texttt{get}, and \texttt{put} here) require no more effects
+than are available. The types of these functions are:
+
+\begin{SaveVerbatim}{getputty}
+
+get : Eff m [STATE x] x
+put : x -> Eff m [STATE x] ()
+
+\end{SaveVerbatim}
+\useverb{getputty}
+
+Each effect is associated with a \remph{resource}. For example, the resource
+associated with \texttt{STATE Int} is the integer state itself.
+To run an effectful program, we must initialise each resource and instantiate
+\texttt{m}. Here we instantiate \texttt{m} with \texttt{id}, resulting in
+a pure function.
+
+\begin{SaveVerbatim}{runEval}
+
+tagFrom : Int -> Tree a -> Tree (Int, a)
+tagFrom x t = runPure [x] (tag t)
+
+\end{SaveVerbatim}
+\useverb{runEval}
+
+\noindent
+In general, to run an effectful program, we use one of the functions
+\texttt{run}, \texttt{runWith} or \texttt{runPure}, instantiating an
+environment with resources corresponding to each effect:
+
+\begin{SaveVerbatim}{runeffs}
+
+run     : Applicative m => 
+          Env m xs -> EffM m xs xs' a -> m a
+runWith : (a -> m a) -> 
+          Env m xs -> EffM m xs xs' a -> m a
+runPure : Env id xs -> EffM id xs xs' a -> a
+
+\end{SaveVerbatim}
+\useverb{runeffs}
+
+The only reason \texttt{run} needs \texttt{m} to be an applicative functor
+is that it uses \texttt{pure} to inject a pure value into \texttt{m}. If this
+is inconvenient, \texttt{runWith} can be used instead. Note that, unlike the
+monad transformer approach, there is no assumption or requirement that
+\texttt{m} is a Monad. Any type transformer is fine --- in particular,
+if the effectful program can be translated into a pure function, \texttt{id}
+is perfectly fine.
+
+As we will see shortly, the particular choice of \texttt{m} can be
+important. Consider, for example, the difference between running a program with
+exceptions in the context of \texttt{IO}, \texttt{Maybe} or \texttt{Either}.
+
+We will return to the definition of \texttt{Env} in Section \ref{sect:envdef}.
+For the moment, it suffices to know that it is a heterogenous list of initial
+resources for each effect.
+
+\subsubsection{Labelled Effects}
+
+What if we have more than one state? For example, imagine we would like to
+count the number of \texttt{Leaf} nodes in a tree while tagging nodes.
+In this case, we will need two integer states:
+
+\begin{SaveVerbatim}{treelblcount}
+
+tagCount : Tree a -> 
+     Eff m [STATE Int, STATE Int] (Tree (Int, a))
+
+\end{SaveVerbatim}
+\useverb{treelblcount}
+
+This leads to a question --- what do \texttt{get} and \texttt{put} now do?  Do
+the read and update the first state, the second, or choose
+non-deterministically? 
+
+In practice, the earlier effect is chosen, which is clearly not the desired
+behaviour.  To avoid this problem, effects may also be \remph{labelled}.
+A label can be of any type:
+
+\begin{SaveVerbatim}{lbleff}
+
+(:::) : lbl -> EFFECT -> EFFECT
+
+\end{SaveVerbatim}
+\useverb{lbleff}
+
+\noindent
+An effect can be converted into a labelled effect using the \texttt{:-}
+operator:
+
+\begin{SaveVerbatim}{addlabel}
+
+(:-) : (l : ty) -> EffM m [x] [y] t -> 
+                   EffM m [l ::: x] [l ::: y] t
+
+\end{SaveVerbatim}
+
+\noindent
+In order to implement \texttt{tagCount} now, first we define a type for the
+labels:
+
+\begin{SaveVerbatim}{lbltys}
+
+data Vars = Count | Tag
+
+\end{SaveVerbatim}
+\useverb{lbltys}
+
+\noindent
+Then, we use these labels to disambiguate the states. To increment the count
+at each leaf, we use \texttt{update}, which combines a \texttt{get} and a
+\texttt{put} by applying a function to the state:
+
+\begin{SaveVerbatim}{treelblcountdef}
+
+tagCount : Tree a -> Eff m [Label ::: STATE Int, 
+                            Tag   ::: STATE Int] 
+                              (Tree (Int, a))
+tagCount Leaf
+     = do Count :- update (+1)
+          return Leaf
+tagCount (Node l x r) 
+     = do l' <- tagCount l
+          lbl <- Tag :- get
+          Tag :- put (lbl + 1)
+          r' <- tagCount r
+          return (Node l' (lbl, x) r')
+
+\end{SaveVerbatim}
+\useverb{treelblcountdef}
+
+\noindent
+In order to get the count, we will need access to the environment \remph{after}
+running \texttt{tagCount}. To do so, we use \texttt{runPureEnv}, which returns
+the final resource states as well as the result of the computation:
+
+\begin{SaveVerbatim}{runenvty}
+
+runPureEnv : Env id xs -> 
+             EffM id xs xs' a -> (Env id xs', a)
+
+\end{SaveVerbatim}
+\useverb{runenvty}
+
+\noindent
+To initialise the environment, we give the label name along with the initial
+value of the resource:
+
+\begin{SaveVerbatim}{rpenvtree}
+
+runPureEnv [Tag := 0, Count := 0] (tagCount t) 
+
+\end{SaveVerbatim}
+\useverb{rpenvtree}
+
+\noindent
+And finally, to implement a pure wrapper function which returns a pair of the
+count of leaves and a labelled tree, we call \texttt{runPureEnv} with the
+initial resources, and match on the returned resources to retrieve the leaf
+count:
+
+\begin{SaveVerbatim}{lcfrom}
+
+tagCountFrom : Int -> Tree a -> (Int, Tree (Int, a))
+tagCountFrom x t 
+    = let ([_, Count := leaves], tree) =
+       runPureEnv [Tag := 0, Count := 0] (tagCount t)
+          in (leaves, tree)
+
+\end{SaveVerbatim}
+\useverb{lcfrom}
+
+\subsubsection{An Effectful Evaluator revisited}
+
+Recall the effectful evaluator of Section \ref{sect:naiveeval}. We can
+implement this is the \texttt{Effects} language as follows:
+
+\begin{SaveVerbatim}{langeff}
+
+Vars : Type
+Vars = List (String, Int)
+
+eval : Expr -> 
+       Eff m [EXCEPTION String, RND, STATE Vars] t
+eval (Val x) = return x
+eval (Var x) = 
+    do vs <- get
+       case lookup x vs of
+            Nothing => raise ("Error " ++ x)
+            Just val => return val
+eval (Add l r) = [| eval l + eval r |]
+eval (Random upper) = rndInt 0 upper
+
+\end{SaveVerbatim}
+\useverb{langeff}
+
+
+\begin{SaveVerbatim}{efftypes}
+
+get : Eff m [STATE x] x
+raise : a -> Eff m [EXCEPTION a] b
+rndInt : Int -> Int -> Eff m [RND] Int
+
+\end{SaveVerbatim}
+\useverb{efftypes}
+
+
+\subsection{Implementing effects}
+
+In order to implement a new effect, we define a new type (of kind \texttt{Effect})
+and explain how that effect is interpreted in some underlying context
+\texttt{m}. We have a type class, \texttt{Handler}, with a method \texttt{handle}
+explaining this interpretation:
+
+\begin{SaveVerbatim}{effh}
+
+class Handler (e : Effect) (m : Type -> Type) where
+     handle : res -> (eff : e res res' t) -> 
+              (res' -> t -> m a) -> m a
+
+\end{SaveVerbatim}
+\useverb{effh}
+
+\noindent
+Handlers are parameterised by the effect they handle, and the context in which
+they handle the effect. This allows several different context-dependent
+handlers to be written --- e.g. exceptions could be handled differently in an
+\texttt{IO} setting than in a \texttt{Maybe} setting. When effects are combined,
+as in the evaluator example above, it is required that all of the effects
+can be combined in the context in which the program is run.
+
+An effect \texttt{e res res' t} updates a resource type \texttt{res} to a
+resource type \texttt{res'}, returning a value \texttt{t}. The handler, therefore,
+implements this update, possibly performing side effects on the way.
+
+The handler is written in continuation passing style. This is for two reasons:
+Firstly, it returns two values, a new resource and the result of the computation,
+which is more cleanly managed in a continuation than by returning a tuple;
+secondly, and more importantly, it gives the handler the flexibility to invoke
+the continuation any number of times (zero or more).
+
+An \texttt{Effect}, which is the internal algebraic description of an effect,
+is promoted into an \texttt{EFFECT}, which is expected by the \texttt{EffM}
+structure, with the \texttt{MkEff} constructor:
+
+\begin{SaveVerbatim}{efft}
+
+data EFFECT : Type where
+     MkEff : Type -> Effect -> EFFECT
+
+\end{SaveVerbatim}
+\useverb{efft}
+
+\noindent
+\texttt{MkEff} additionally takes the initial resource state of an effect.
+In the remainder of this section, we describe how several effects can be
+implemented in this way: mutable state; console I/O; exceptions; files; random
+numbers, and non-determinism.
+
+\subsubsection{State}
+
+\ldots
+
+\begin{SaveVerbatim}{statealg}
+
+data State : Effect where
+     Get :      State a a a
+     Put : b -> State a b ()
+
+\end{SaveVerbatim}
+\useverb{statealg}
+
+We can implement a handler for this effect, for all contexts \texttt{m},
+as follows:
+
+\begin{SaveVerbatim}{statehandle}
+
+instance Handler State m where
+     handle st Get     k = k st st
+     handle st (Put n) k = k n ()
+
+\end{SaveVerbatim}
+\useverb{statehandle}
+
+\noindent
+When running \texttt{Get}, the handler passes the current state to the
+continuation as both the new resource value (the first argument of the
+continuation \texttt{k}) as well as the return value of the computation (the
+second argument of the continuation). When running \texttt{Put}, the new state
+is passed to the continuation as the new resource value.
+
+We then convert the algebraic effect \texttt{State} to be usable in an
+\Eff{} program using the \texttt{STATE} function, to which we provide the
+initial state type as folllows:
+
+\begin{SaveVerbatim}{statepromote}
+
+STATE : Type -> EFFECT
+STATE t = MkEff t State
+
+\end{SaveVerbatim}
+\useverb{statepromote}
+
+\noindent
+Algebraic effects are promoted to programs in \Eff{} by using the
+\texttt{effect} function. We will postpone giving the type of
+\texttt{effect} --- it is not important to know this for creating effects,
+and suffices to know that it converts an \texttt{Effect} to an effectful
+program. To create the \texttt{get} function in \Eff{}, for example:
+
+\begin{SaveVerbatim}{getdef}
+
+get : Eff m [STATE x] x
+get = effect Get 
+
+\end{SaveVerbatim}
+\useverb{getdef}
+
+\noindent
+Implementing \texttt{put} is similar:
+
+\begin{SaveVerbatim}{putdef}
+
+put : x -> Eff m [STATE x] ()
+put val = effect (Put val)
+
+\end{SaveVerbatim}
+\useverb{putdef}
+
+\noindent
+We may also find it useful to mutate the \remph{type} of a state, considering
+that states may themselves have dependent types (we may, for example, add
+an element to a vector in a state). For this, we provide \texttt{putM}:
+
+\begin{SaveVerbatim}{putmdef}
+
+putM : y -> EffM m [STATE x] [STATE y] ()
+putM val = effect (Put val)
+
+\end{SaveVerbatim}
+\useverb{putmdef}
+
+\noindent
+Finally, it may be useful to combine \texttt{get} and \texttt{put} in a single
+update:
+
+\begin{SaveVerbatim}{update}
+
+update : (x -> x) -> Eff m [STATE x] ()
+update f = do val <- get
+              put (f val) 
+
+\end{SaveVerbatim}
+\useverb{update}
+
+\subsubsection{Console I/O}
+
+We consider a simplified version of console I/O which supports writing strings
+to the console, and reading strings. There is no resource associated with
+console I/O (although in an alternative implementation we may associate it
+with an abstract world state, or a pair of file handles for \texttt{stdin}
+and \texttt{stdout}). Algebraically, we describe console I/O as follows:
+
+\begin{SaveVerbatim}{stdioeff}
+
+data StdIO : Effect where
+     PutStr : String -> StdIO () () ()
+     GetStr : StdIO () () String
+
+STDIO : EFFECT
+STDIO = MkEff () StdIO
+
+\end{SaveVerbatim}
+\useverb{stdioeff}
+
+\noindent
+The obvious way to handle \texttt{StdIO} is by translating via the \texttt{IO}
+monad, which is implemented straightforwardly as follows:
+
+\begin{SaveVerbatim}{stdiohandle}
+
+instance Handler StdIO IO where
+    handle () (PutStr s) k = do putStr s; k () ()
+    handle () GetStr     k = do x <- getLine; k () x 
+
+\end{SaveVerbatim}
+\useverb{stdiohandle}
+
+\noindent
+Unlike the \texttt{State} effect, for which the handler worked in \remph{all}
+contexts, this handler only applies to effectful programs run in an \texttt{IO}
+context. We can implement alternative handlers, and indeed there is no
+reason that effectful programs in \texttt{StdIO} must be evaluated in a monadic
+context. For example, we can define I/O stream functions and an associated
+handler:
+
+\begin{SaveVerbatim}{iostream}
+
+data IOStream a 
+   = MkStream (List String -> (a, List String))
+
+instance Handler StdIO IOStream where
+    ....
+
+\end{SaveVerbatim}
+\useverb{iostream}
+
+\noindent
+A handler for \texttt{StdIO} in \texttt{IOStream} context generates a function
+from a list of strings (the input text) to a value and the output text. We
+can build a pure function which simuates an effectful console I/O program
+using the following function:
+
+\begin{SaveVerbatim}{mkstrfun}
+
+mkStrFn : Env IOStream xs -> Eff IOStream xs a -> 
+          List String -> (a, List String)
+mkStrFn {a} env p input = case mkStrFn' of
+                               MkStream f => f input
+  where injStream : a -> IOStream a
+        injStream v = MkStream (\x => (v, []))
+        mkStrFn' : IOStream a
+        mkStrFn' = runWith injStream env p
+
+\end{SaveVerbatim}
+\useverb{mkstrfun}
+
+\noindent
+To illustrate this, we write a simple console I/O program which runs in
+any context which has a handler for \texttt{StdIO}:
+
+\begin{SaveVerbatim}{ioname}
+
+name : Handler StdIO e => Eff e [STDIO] ()
+name = do putStr "Name? "
+          n <- getStr
+          putStrLn ("Hello " ++ show n)
+
+\end{SaveVerbatim}
+\useverb{ioname}
+
+\noindent
+Using \texttt{mkStrFn}, we can run this as a pure function which uses a list
+of strings as its input, and gives a list of strings as its output. We can
+evaluate this at the \Idris{} prompt:
+
+\begin{SaveVerbatim}{mkstrfunrun}
+
+*name> show $ mkStrFn [()] name ["Edwin"]
+((), ["Name?" , "Hello Edwin\n"]) 
+
+\end{SaveVerbatim}
+\useverb{mkstrfunrun}
+
+\noindent
+
+\begin{SaveVerbatim}{blehlatex}
+$
+\end{SaveVerbatim}
+
+\noindent
+This suggests that alternative, pure, handlers for console I/O,
+or any I/O effect for that matter, can be used for unit testing I/O programs
+without executing any real I/O and possibly even proving theorems about them.
+
+\subsubsection{Exceptions}
+
+\begin{SaveVerbatim}{exctype}
+
+data Exception : Type -> Type -> Type -> Type -> Type where
+     Raise : a -> Exception a () () b 
+
+EXCEPTION : Type -> EFFECT
+EXCEPTION t = MkEff () (Exception t) 
+
+\end{SaveVerbatim}
+\useverb{exctype}
+
+\begin{SaveVerbatim}{excmaybe}
+
+instance Handler (Exception a) Maybe where
+     handle _ (Raise e) k = Nothing
+
+\end{SaveVerbatim}
+\useverb{excmaybe}
+
+\begin{SaveVerbatim}{exceither}
+
+instance Handler (Exception a) (Either a) where
+     handle _ (Raise e) k = Left e
+
+\end{SaveVerbatim}
+\useverb{exceither}
+
+Given that we can raise exceptions in an \Eff{} program, it's also useful to be
+able to catch them.
+
+\begin{SaveVerbatim}{catch}
+
+catch : Catchable m err =>
+        EffM m xs xs' a -> (err -> EffM m xs xs' a) ->
+        EffM m xs xs' a
+
+\end{SaveVerbatim}
+\useverb{catch}
+
+\begin{SaveVerbatim}{catchable}
+
+class Catchable (m : Type -> Type) t where
+    throw : t -> m a
+    catch : m a -> (t -> m a) -> m a
+
+\end{SaveVerbatim}
+\useverb{catchable}
+
+
+
+\subsubsection{Resource management: Files}
+
+\begin{SaveVerbatim}{fileeff}
+
+data Mode = Read | Write
+
+data OpenFile : Mode -> Type where
+     FH : File -> OpenFile m
+
+\end{SaveVerbatim}
+\useverb{fileeff}
+
+\noindent
+The \texttt{FILE\_IO} effect is parameterised over the current state of a
+file resource with which it is associated:
+
+\begin{SaveVerbatim}{fileres}
+
+FILE_IO : Type -> EFFECT
+
+\end{SaveVerbatim}
+\useverb{fileres}
+
+\noindent
+This means that the current state of a file handle is tracked in the resource
+and it is therefore possible to encode the protocol that files must be opened
+before being read, and closed before execution completes, in the type.
+The type of \texttt{open} expresses that the resource changes from a unit
+to an open file:
+
+\begin{SaveVerbatim}{openeff}
+
+open : String -> (m : Mode) -> 
+       EffM IO [FILE_IO ()] [FILE_IO (OpenFile m)] ()
+
+\end{SaveVerbatim}
+\useverb{openeff}
+
+\noindent
+Note that opening a file may fail --- we will deal with exceptional behaviour
+shortly. 
+Using \texttt{EffM}, we have expressed that opening a file causes a change in the
+resource state.
+It is then only possible to close a file if there is an open file
+available:
+
+\begin{SaveVerbatim}{closeeff}
+
+close : EffM IO [FILE_IO (OpenFile m)] [FILE_IO ()] ()
+close = Close
+
+\end{SaveVerbatim}
+\useverb{closeeff}
+
+\noindent
+Reading is only possible from a file opened for reading:
+
+\begin{SaveVerbatim}{readeff}
+
+readLine : Eff IO [FILE_IO (OpenFile Read)] String
+
+\end{SaveVerbatim}
+\useverb{readeff}
+\subsubsection{Random numbers}
+
+\begin{SaveVerbatim}{randomeff}
+
+data Random : Type -> Type -> Type -> Type where
+     getRandom : Random Int Int Int
+
+\end{SaveVerbatim}
+\useverb{randomeff}
+
+\noindent
+Handling random number generation shows that it is a state effect in
+disguise, where the effect updates the seed according to a simple rule:
+
+\begin{SaveVerbatim}{randomhandle}
+
+instance Handler Random m where
+    handle seed getRandom k
+         = let seed' = 1664525 * seed + 1013904223 in
+               k seed' seed'
+
+\end{SaveVerbatim}
+\useverb{randomhandle}
+
+\subsubsection{Non-determinism}
+
+Following~\cite{Bauer},
+non-determinism can be implemented as an effect \texttt{Selection},
+in which a \texttt{Select} chooses one value non-deterministically
+from a list of possible values:
+
+\begin{SaveVerbatim}{selecteff}
+
+data Selection : Effect where
+     Select : List a -> Selection () () a
+
+\end{SaveVerbatim}
+\useverb{selecteff}
+
+\noindent
+We can handle this effect in a \texttt{Maybe} context, trying every choice
+in a list given to \texttt{Select} until the computation succeeds:
+
+\begin{SaveVerbatim}{selectmaybe}
+
+instance Handler Selection Maybe where
+     handle _ (Select xs) k = tryAll xs where
+         tryAll [] = Nothing
+         tryAll (x :: xs) = case k () x of
+                                 Nothing => tryAll xs
+                                 Just v => Just v
+
+\end{SaveVerbatim}
+\useverb{selectmaybe}
+
+\noindent
+The handler for \texttt{Maybe} produces one result if it exists, effectively
+performing a depth first search of all of the values passed to \texttt{Select}.
+Note in particular that the handler runs the continuation for every element
+of the list until the result of running the continuation succeeds.
+
+Alternatively, we can find \remph{every} possible result by handling selection
+in a \texttt{List} context:
+
+\begin{SaveVerbatim}{selectlist}
+
+instance Handler Selection List where
+     handle r (Select xs) k = concatMap (k r) xs
+
+\end{SaveVerbatim}
+\useverb{selectlist}
+
+\noindent
+We can use the \texttt{Selection} effect to implement search problems by
+non-deterministically choosing from a list of candidate solutions. For example,
+a solution to the n-Queens problem can be implemented as follows.
+First, we write a function which checks whether a point on a chessboard
+attacks another if occupied by a Queen:
+
+\begin{SaveVerbatim}{noattack}
+
+no_attack : (Int, Int) -> (Int, Int) -> Bool
+no_attack (x, y) (x', y')
+   = x /= x' && y /= y' && abs (x - x') /= abs (y - y')
+
+\end{SaveVerbatim}
+\useverb{noattack}
+
+\noindent
+Then, given a column and a list of Queen positions, we find the rows on which
+a Queen may safely be placed in that column:
+
+\begin{SaveVerbatim}{rowsin}
+
+rowsIn : Int -> List (Int, Int) -> List Int
+rowsIn col qs 
+   = [ x | x <- [1..8], all (no_attack (x, col)) qs ]
+
+\end{SaveVerbatim}
+\useverb{rowsin}
+
+\noindent
+Finally, we compute a solution by accumulating a set of Queen positions,
+column by column, non-deterministically choosing a position for a Queen in
+each column.
+
+\begin{SaveVerbatim}{nqueens}
+
+addQueens : Int -> List (Int, Int) -> 
+            Eff m [SELECT] (List (Int, Int))
+addQueens 0   qs = return qs
+addQueens col qs 
+   = do row <- select (rowsIn col qs)
+        addQueens (col - 1) ((row, col) :: qs)
+
+\end{SaveVerbatim}
+\useverb{nqueens}
+
+\noindent
+We can run this in \texttt{Maybe} context, to retrieve one solution, or in
+\texttt{List} context, to retrieve all solutions.
+
