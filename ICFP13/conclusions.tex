@@ -1,5 +1,7 @@
 \section{Related Work}
 
+\label{sect:related}
+
 DDC, Frank, Koka, Eff~\cite{Bauer}.
 
 Unlike these other implementations, rather than building a language around
@@ -19,9 +21,12 @@ Theoretical work on effects: Plotkin, Power, Kammar, etc. Free monads?
 
 \section{Conclusions}
 
+\label{sect:conclusion}
+
 Strengths: monad transformers not needed. Lift automatic, can permute effects
 without need to change program. Flexibility. Easy to read and write.
-Other effects we should be able to support --- parsing, logging, and in particular
+Other effects we should be able to support --- parsing, logging, bounded
+mutable arrays, and in particular
 it will be possible to have fine-grained separation of systems effects, e.g.
 we can be precise about needing network support, CGI, graphics, OS
 environment, etc, rather than throwing it all into one IO monad.

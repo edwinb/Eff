@@ -1,32 +1,64 @@
 \section{\Eff{}: an Embedded DSL for Effects Management} 
 
-\subsection{Programming with effects}
+In this section, I introduce \Eff{}, an embedded domain specific language
+for managing computational effects in \Idris{}. First, I describe how to
+\remph{use} effects which are already defined in the language in order to
+implement the evaluator described in the introduction. Then, I show how new
+effects may be implemented.
+
+\label{sect:effdsl}
+
+\subsection{Programming with \Eff{}}
+
+Programs in the \Eff{} language are described using the following data type,
+in the simplest case:
 
 \begin{SaveVerbatim}{efftype}
 
-Eff  : (m : Type -> Type) -> List EFFECT -> Type -> Type
+Eff  : (m  : Type -> Type) -> 
+       (es : List EFFECT) -> 
+       (a  : Type) -> Type
 
 \end{SaveVerbatim}
 \useverb{efftype}
+
+\noindent
+This is parameterised over a \remph{computation context}, \texttt{m}, which
+describes the context in which the effectful program will be run, a list
+of side effects \texttt{es} that the program is permitted to use, 
+and the program's return type \texttt{a}. The name \texttt{m} for the computation
+context is suggestive of a monad --- the computation context most commonly 
+is a monad but there is no requirement for it to be so.
+
+Side effects are described using the \texttt{EFFECT} type, with the following
+among the predefined effects:
 
 \begin{SaveVerbatim}{effs}
 
 STATE     : Type -> EFFECT
 EXCEPTION : Type -> EFFECT
-STDIO     : EFFECT
 FILEIO    : Type -> EFFECT
+STDIO     : EFFECT
 RND       : EFFECT
 
 \end{SaveVerbatim}
 \useverb{effs}
 
-A program with some integer state, which performs console I/O 
+States are parameterised by the type of the state being carried, and exceptions
+are parameterisde by a type representing errors. File I/O is an effect which
+allows a single file to be processed, with the type giving the current state
+of the file (i.e. closed, open for reading, or open for writing). The
+\texttt{STDIO} effect permits console I/O, and \texttt{RND} permits random
+number generation.
+%
+For example, a program with some integer state, which performs console I/O 
 and which could throw
 an exception of type \texttt{Error} might have the following type:
 
+\noindent
 \begin{SaveVerbatim}{exprog}
 
-example : Eff IO [EXCEPTION Error, STDIO, STATE Int] ()
+ example : Eff IO [EXCEPTION Error, STDIO, STATE Int] ()
 
 \end{SaveVerbatim}
 \useverb{exprog}
@@ -34,19 +66,33 @@ example : Eff IO [EXCEPTION Error, STDIO, STATE Int] ()
 More generally, a program might modify the set of effects available. This
 might be desirable for several reasons, such as wanting to add a new effect
 such as a new global state variable, or to update an index of a dependently
-typed state:
+typed state. In this case, we describe programs using the \texttt{EffM}
+data type:
 
 \begin{SaveVerbatim}{effmtype}
 
-EffM : (m : Type -> Type) -> 
-       List EFFECT -> List EFFECT -> Type -> Type
+EffM : (m   : Type -> Type) -> 
+       (es  : List EFFECT) -> 
+       (es' : List EFFECT) -> 
+       (a   : Type) -> Type
 
 \end{SaveVerbatim}
-
 \useverb{effmtype}
+
+\noindent
+This is parameterised over the computation context and type as before, but
+separates input effects (\texttt{es}) from output effects (\texttt{es'}).
+In fact, \texttt{Eff} is defined in terms of \texttt{EffM}, with equal input
+and output effects.
 
 \subsubsection{First example: State}
 
+In general, an effectful program implemented in the \texttt{EffM} structure has
+the look and feel of a monadic program in Haskell, since \texttt{EffM} supports
+\texttt{do}-notation. To illustrate basic usage, let us implement
+a program with state --- a function which tags each node in a binary tree with
+a unique integer, counting depth first, left to right. We declare trees as
+follows:
 
 \begin{SaveVerbatim}{treedef}
 
@@ -55,6 +101,11 @@ data Tree a = Leaf
 
 \end{SaveVerbatim}
 \useverb{treedef}
+
+\noindent
+To tag each node in the tree, we write an effectful program which, for each
+node, tags the left subtree, reads and updates the state, tags the right
+subtree, then returns a new node with its value tagged:
 
 \begin{SaveVerbatim}{treelbl}
 
@@ -71,11 +122,11 @@ tag (Node l x r)
 \useverb{treelbl}
 
 \noindent
-In the type, we list the available effects. In this case, we are allowed
-to carry a single state. The \Eff{}
-language ensures, statically, that any effectful functions which are called
-(\texttt{get}, and \texttt{put} here) require no more effects
-than are available. The types of these functions are:
+In the type, we list the available effects ---  in this case, 
+a single state. The \Eff{} language ensures, statically, that any
+effectful functions which are called (\texttt{get}, and \texttt{put} here)
+require no more effects than are available --- there is no need for any
+\texttt{lift} to find the necessary effect. The types of these functions are:
 
 \begin{SaveVerbatim}{getputty}
 
@@ -85,11 +136,12 @@ put : x -> Eff m [STATE x] ()
 \end{SaveVerbatim}
 \useverb{getputty}
 
+\noindent
 Each effect is associated with a \remph{resource}. For example, the resource
-associated with \texttt{STATE Int} is the integer state itself.
-To run an effectful program, we must initialise each resource and instantiate
-\texttt{m}. Here we instantiate \texttt{m} with \texttt{id}, resulting in
-a pure function.
+associated with \texttt{STATE Int} is the integer state itself.  To \remph{run}
+an effectful program, we must initialise each resource and instantiate
+\texttt{m}. Here we instantiate \texttt{m} with \texttt{id}, resulting in a
+pure function.
 
 \begin{SaveVerbatim}{runEval}
 
@@ -107,35 +159,42 @@ environment with resources corresponding to each effect:
 \begin{SaveVerbatim}{runeffs}
 
 run     : Applicative m => 
-          Env m xs -> EffM m xs xs' a -> m a
+          Env m es -> EffM m es es' a -> m a
 runWith : (a -> m a) -> 
-          Env m xs -> EffM m xs xs' a -> m a
-runPure : Env id xs -> EffM id xs xs' a -> a
+          Env m es -> EffM m es es' a -> m a
+runPure : Env id es -> EffM id es es' a -> a
 
 \end{SaveVerbatim}
 \useverb{runeffs}
 
+\noindent
 The only reason \texttt{run} needs \texttt{m} to be an applicative functor
 is that it uses \texttt{pure} to inject a pure value into \texttt{m}. If this
 is inconvenient, \texttt{runWith} can be used instead. Note that, unlike the
 monad transformer approach, there is no assumption or requirement that
-\texttt{m} is a Monad. Any type transformer is fine --- in particular,
+\texttt{m} is a monad. Any type transformer is fine --- in particular,
 if the effectful program can be translated into a pure function, \texttt{id}
 is perfectly fine.
 
 As we will see shortly, the particular choice of \texttt{m} can be
 important. Consider, for example, the difference between running a program with
 exceptions in the context of \texttt{IO}, \texttt{Maybe} or \texttt{Either}.
-
+%
 We will return to the definition of \texttt{Env} in Section \ref{sect:envdef}.
-For the moment, it suffices to know that it is a heterogenous list of initial
-resources for each effect.
+For the moment, it suffices to know that it is a heterogenous list of values
+for the initial resources \texttt{es}.
 
 \subsubsection{Labelled Effects}
 
-What if we have more than one state? For example, imagine we would like to
-count the number of \texttt{Leaf} nodes in a tree while tagging nodes.
-In this case, we will need two integer states:
+When we invoke effectful functions such as \texttt{get} and \texttt{put},
+the \Eff{} language internally searches through the list of available effects
+to check that it is support, and invokes the effect using the corresponding
+resource. This leads to an important question: what if we have more than one 
+effect which supports the function? A particular situation where this arises
+is when we have more than one integer state.
+
+For example, imagine we would like to count the number of \texttt{Leaf} nodes
+in a tree while tagging nodes.  In this case, we will need two integer states:
 
 \begin{SaveVerbatim}{treelblcount}
 
@@ -145,35 +204,30 @@ tagCount : Tree a ->
 \end{SaveVerbatim}
 \useverb{treelblcount}
 
-This leads to a question --- what do \texttt{get} and \texttt{put} now do?  Do
-the read and update the first state, the second, or choose
+What should be the effect of \texttt{get} and \texttt{put} in this program?
+Do they read and update the first state, the second, or choose
 non-deterministically? 
-
-In practice, the earlier effect is chosen, which is clearly not the desired
-behaviour.  To avoid this problem, effects may also be \remph{labelled}.
-A label can be of any type:
+%
+In practice, the earlier effect is chosen. While clearly defined, this is
+unlikely to be the desired behaviour, so 
+to avoid this problem, effects may also be \remph{labelled} using the
+\texttt{:::} operator.  A label can be of any type, and an
+effect can be converted into a labelled effect using the \texttt{:-}
+operator:
 
 \begin{SaveVerbatim}{lbleff}
 
 (:::) : lbl -> EFFECT -> EFFECT
+(:-)  : (l : lbl) -> EffM m [x] [y] t -> 
+                     EffM m [l ::: x] [l ::: y] t
 
 \end{SaveVerbatim}
 \useverb{lbleff}
 
 \noindent
-An effect can be converted into a labelled effect using the \texttt{:-}
-operator:
-
-\begin{SaveVerbatim}{addlabel}
-
-(:-) : (l : ty) -> EffM m [x] [y] t -> 
-                   EffM m [l ::: x] [l ::: y] t
-
-\end{SaveVerbatim}
-
-\noindent
 In order to implement \texttt{tagCount} now, first we define a type for the
-labels:
+labels. We have one state variable representing the leaf count, and one
+representing the current tag:
 
 \begin{SaveVerbatim}{lbltys}
 
@@ -187,11 +241,13 @@ Then, we use these labels to disambiguate the states. To increment the count
 at each leaf, we use \texttt{update}, which combines a \texttt{get} and a
 \texttt{put} by applying a function to the state:
 
-\begin{SaveVerbatim}{treelblcountdef}
+\begin{SaveVerbatim}{treelblcountty}
 
 tagCount : Tree a -> Eff m [Label ::: STATE Int, 
                             Tag   ::: STATE Int] 
                               (Tree (Int, a))
+\end{SaveVerbatim}
+\begin{SaveVerbatim}{treelblcountdef}
 tagCount Leaf
      = do Count :- update (+1)
           return Leaf
@@ -203,6 +259,9 @@ tagCount (Node l x r)
           return (Node l' (lbl, x) r')
 
 \end{SaveVerbatim}
+
+\useverb{treelblcountty}
+
 \useverb{treelblcountdef}
 
 \noindent
@@ -248,13 +307,38 @@ tagCountFrom x t
 
 \subsubsection{An Effectful Evaluator revisited}
 
-Recall the effectful evaluator of Section \ref{sect:naiveeval}. We can
-implement this is the \texttt{Effects} language as follows:
+Recall the effectful evaluator in the introduction. To implement this
+in the \Eff{} language, we must support exceptions, a state containing the
+current environment, and random number generation. Environments are
+represented as a list of mappings from \texttt{String} to \texttt{Int}
 
-\begin{SaveVerbatim}{langeff}
+\begin{SaveVerbatim}{langenv}
 
 Vars : Type
 Vars = List (String, Int)
+
+\end{SaveVerbatim}
+\useverb{langenv}
+
+\noindent
+The evaluator invokes supported effects where needed. We use the following
+effectful functions:
+
+\begin{SaveVerbatim}{efftypes}
+
+get    : Eff m [STATE x] x
+raise  : a -> Eff m [EXCEPTION a] b
+rndInt : Int -> Int -> Eff m [RND] Int
+
+\end{SaveVerbatim}
+\useverb{efftypes}
+
+\noindent
+The evaluator itself is written as an instance of \texttt{Eff}, using
+\texttt{do}-notation as in the monad transformer implementation:
+
+
+\begin{SaveVerbatim}{langeff}
 
 eval : Expr -> 
        Eff m [EXCEPTION String, RND, STATE Vars] t
@@ -270,16 +354,60 @@ eval (Random upper) = rndInt 0 upper
 \end{SaveVerbatim}
 \useverb{langeff}
 
+\noindent
+\textbf{Remark:}
+We have used idiom brackets~\cite{McBride2007} in this implementation, to
+give a more concision notation for applicative programming with effects.
+An application inside idiom brackets, \texttt{[| f a b c d |]} translates
+directly to:
 
-\begin{SaveVerbatim}{efftypes}
+\begin{SaveVerbatim}{idiomtrans}
 
-get : Eff m [STATE x] x
-raise : a -> Eff m [EXCEPTION a] b
-rndInt : Int -> Int -> Eff m [RND] Int
+pure f <$> a <$> b <$> c <$> d
 
 \end{SaveVerbatim}
-\useverb{efftypes}
+\useverb{idiomtrans}
 
+\noindent
+In order to run this evaluator, we must provide initial values for the resources
+associated with each effect. Exceptions require the unit resource, random
+number generation requires an initial seed, and the state requries an initial
+environment. We instantiate \texttt{m} with \texttt{Maybe} to be able
+to handle exceptions:
+
+\begin{SaveVerbatim}{exprrun}
+
+runEval : List (String, Int) -> Expr -> Maybe Int
+runEval env expr = run [(), 123456, env] (eval expr)
+
+\end{SaveVerbatim}
+\useverb{exprrun}
+
+\noindent
+Extending the evaluator with a new effect, such as \texttt{STDIO} is a matter
+of extending the list of available effects in its type, and instantiating 
+the \texttt{STDIO} resource, which is a unit. We could use this, for example,
+to print out the generated random numbers:
+
+\begin{SaveVerbatim}{langeffio}
+
+eval : Expr -> 
+       Eff m [EXCEPTION String, STDIO, 
+              RND, STATE Vars] t
+...
+eval (Random upper) = do num <- rndInt 0 upper
+                         putStrLn (show num)
+                         return num
+
+runEval env expr = run [(), (), 123456, env] (eval expr)
+
+\end{SaveVerbatim}
+\useverb{langeffio}
+
+\noindent
+We can insert the \texttt{STDIO} effect anywhere in the list without difficulty
+--- the only requirement is that its initial resource is in the corresponding
+position in the call to \texttt{run}.
 
 \subsection{Implementing effects}
 

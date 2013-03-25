@@ -1,56 +1,191 @@
 \section{Introduction}
 
-Problem: monads for effects, but monads don't compose nicely. Standard
-solution is monad transformers, but get unwieldy quickly. No motivation
-for separating effects, state, etc.
+%Pure functional programming languages with \remph{dependent types} such as
+%\Idris{}~\cite{idristutorial}, Agda~\cite{norell2009dependently} and
+%Coq~\cite{Bertot2004} offer a programmer can both to write programs and verify
+%specifications within the same framework. Thanks to the Curry-Howard
+%correspondence, a program which type checks can be viewed as a proof that it
+%conforms to the specification given by its type. Dependent types allow
+%more precise types, and therefore more precise specifications.
 
-Algebraic effects and handlers seem a nice solution to effect handling
-problem. Not equivalent to monad transformers, but is that a problem?
+Pure functions do not have side effects, but real applications do:
+they may have state, communicate across a network, read and write files, 
+or interact with users, among many other things. Furthermore, real systems
+may fail --- data may be corrupted or untrusted. Pure functional programming
+languages such as Haskell~\cite{Haskell98} manage such problems using
+\remph{monads}~\cite{Wadler1995}, and allow multiple effects to be combined
+using a stack of \remph{monad transformers}~\cite{Liang1995}.
 
-We create a language of algebraic effects, and make an extensible interpreter
-for that language which translates into some underlying monad (so, in a way,
-creating the ultimate monad transformer). 
-Extensible, because we can add new effects, and handle them differently 
-according to the needs of the underlying monad.
+Monad transformers are an effective tool for structuring larger Haskell
+applications. A simple application using a Read-Execute-Print loop,
+for example, may have some global state and perform console I/O, and hence
+be built with an \texttt{IO} monad transformed into a state monad
+using the \texttt{StateT} transformer. However, there are some difficulties
+with building applications in this way. Two of the most important
+are that the order in which transformers are applied matters (that is, 
+transformers do not commute easily), and that it is difficult to invoke a
+function which uses a subset of the transformers in the stack.
+To illustrate these problem, consider an evaluator, in Haskell, for a 
+simple expression language:
 
-We show: the effect DSL. How to create effects, how to combine effects and
-how some simple automated theorem proving makes this work.
+\begin{SaveVerbatim}{exprlang1}
+
+data Expr = Val Int | Add Expr Expr
+
+eval : Expr -> Int
+eval (Val i) = i
+eval (Add x y) = eval x + eval y
+
+\end{SaveVerbatim}
+\useverb{exprlang1}
+
+\noindent
+If we extend this language with variables, we need to extend the evaluator
+with an environment, and deal with possible failure if a variable is undefined
+(we omit the \texttt{Val} and \texttt{Add} cases):
+
+\begin{SaveVerbatim}{exprlang2}
+
+data Expr = Val Int | Add Expr Expr | Var String
+
+type Env = [(String, Int)]
+
+eval :: Expr -> ReaderT Env Maybe Int
+eval (Var x) = do env <- ask
+                  val <- lift (lookup x env)
+                  return val
+
+\end{SaveVerbatim}
+\useverb{exprlang2}
+
+\noindent
+Here, the \texttt{Maybe} monad captures possible failure, and is transformed
+into a reader monad using the \texttt{ReaderT} transformer to store the
+environment. The \texttt{lift} operation allows functions in the inner
+\texttt{Maybe} monad to be called.  
+We can extend the language further, with random number generation:
+
+\begin{SaveVerbatim}{exprlang3}
+
+data Expr = Val Int | Add Expr Expr | Var String
+          | Random Int
+
+eval :: Expr -> RandT (ReaderT Env Maybe) Int
+eval (Var x) = do env <- lift ask
+                  val <- lift (lift (lookup x env))
+                  return val
+eval (Random x) = do val <- getRandomR (0, x)
+                     return val
+
+\end{SaveVerbatim}
+\useverb{exprlang3}
+
+\noindent
+We have added another transformer to the stack, \texttt{RandT}, and added
+\texttt{lift} where necessary to access the appropriate monads in the stack.
+We have been able to build this interpreter from reusable components --- the
+\texttt{Maybe} monad and \texttt{ReaderT} and \texttt{RandT} transformers ---
+which is clearly a good thing. One small problem, however, is that the use of
+\texttt{lift} is a little noisy, and will only get worse if we add more
+monads to the stack, such as \texttt{IO}. Bigger problems occur if we need
+to permute the order of the transformers, or invoke a function which uses a
+subset, for example:
+
+\begin{SaveVerbatim}{mtransprobs}
+
+permute :: ReaderT Env (RandT Maybe) a -> 
+           RandT (ReaderT Env Maybe) a
+dropReader :: RandT Maybe a -> 
+              RandT (ReaderT Env Maybe) a
+
+\end{SaveVerbatim}
+\useverb{mtransprobs}
+
+\noindent
+These problems mean that, in general, there is little motivation for separating
+effects, and a temptation to build an application around one general purpose
+monad capturing all of an application's state and exception handling needs.
+
+It would be desirable, on the other hand, to separate effects into specific
+components such as console I/O, file and network handling and operating system
+interaction, for the same reason that it is desirable to separate the pure
+fragments of a program from the impure fragments using the \texttt{IO} monad.
+That is, the program's type would give more precise information about what the
+program is supposed to do, making the program easier to reason about and
+reducing the possibility of errors.
+
+In this paper, I present an alternative approach to combining effects in
+a pure functional programming language, based on handlers of
+\remph{algebraic effects}~\cite{Bauer}.
+We implement this approach directly as a domain specific language embedded
+in a dependently typed host language, \Idris{}~\cite{Brady2013,idristutorial}.
 
 \subsection{Contributions}
 
+The main contribution of this paper is a notation for describing and combining
+side effects using \Idris{}. More specifically, the paper makes the
+following contributions:
+
 \begin{itemize}
-\item An embedded DSL for capturing fine grained \emph{algebraic effects}, in
-such a way that they are easily composable, and translatable to a variety of
-underlying monads using \emph{effect handlers}.
-\item An extension of the DSL for tracking the \emph{state} of resources
-associated with effects, such as whether a file handle is open or a network
-socket is ready to receive data.
-\item A collection of example effects (State, File, Console I/O, Exceptions,
-Random numbers, non-determinism\ldots) and handlers and their
-relationship with monads and monad transformers.
-\item A more complex example: using effects and handlers to implement
-precisely typed bindings for an external API. [Don't know what this will be
-yet\ldots]
+\item An Embedded Domain Specifc Language, \Eff{}, for capturing \emph{algebraic
+effects}, in such a way that they are easily composable, and translatable to a
+variety of underlying contexts using \emph{effect handlers}.
+% \item An extension of the DSL for tracking the \emph{state} of resources
+% associated with effects, such as whether a file handle is open or a network
+% socket is ready to receive data.
+\item A collection of example effects (State, Exceptions,
+File and Console I/O, random number generation and
+non-determinism) and their handlers. I show how alternative handlers
+can be used to evaluate effects in different contexts. In particular, we can
+implement unit tests for (and possibly reason about) IO programs by handling
+the effect in the context of input and output streams.
+\item I give example programs which combine effects, including a larger
+example, an interpreter for an imperative language with mutable variables, to
+illustrate how effectful applications may be structured.
 \end{itemize}
 
+\noindent
 The library makes essential use of \emph{dependent types}, firstly to verify
-that a specific effect is available to an effectful program, and secondly
-to track the state of a resource by updating its type during program
-execution.
+that a specific effect is available to an effectful program using simple
+automated theorem proving, and secondly to track the state of a resource by
+updating its type during program execution. In this way, we can use the \Eff{}
+language to verify implementations of resource usage protocols.
 
-[Idea: We can use the ability to implement different handlers to make
-unit tests for interactive programs. Worth doing? Also, possibly, reasoning
-about effectful programs.]
+I describe how to \remph{use} the \Eff{} language in Section \ref{sect:effdsl},
+how it is implemented in Section \ref{sect:effimpl}, and give a larger example
+in Section \ref{sect:impint}. It is distributed with
+\Idris{}\footnote{\url{http://idris-lang.org/}}. All of the examples in this
+paper are available online at \url{http://idris-lang.org/effects}.
 
-\subsection{Outline}
 
-Possible structure:
 
-\begin{itemize}
-\item Monad transformers and why they don't compose nicely
-\item Motivating example in \Idris{}
-\item How to use it, how to create effects
-\item How it works
-\item Bigger example (CGI?)
-\end{itemize}
+%[Idea: We can use the ability to implement different handlers to make
+%unit tests for interactive programs. Worth doing? Also, possibly, reasoning
+%about effectful programs.]
+
+%\subsection{Outline}
+
+% TODO: Drop this into the narrative above...
+
+%This paper is structured as follows: In Section \ref{sect:idris} I briefly
+%introduce the \Idris{} programming language, in particular the distinctive
+%features we will use in the \Eff{} implementation; Section \ref{sect:effectsfp}
+%motivates the problem of effect handling by describing an effectful evaluator
+%implemented in \Idris{}; in Section \ref{sect:effdsl} I describe the \Eff{} DSL,
+%showing how to \remph{use} defined effects, and how to define new effects;
+%Section \ref{sect:effimpl} covers the implementation of \Eff{}; in Section
+%\ref{sect:impint} I give a larger example, an interpreter for an imperative
+%language implemented using \Eff{}, then finally I discuss related work and
+%conclude in Sections \ref{sect:related} and \ref{sect:conclusion}.
+
+
+%Possible structure:
+
+%\begin{itemize}
+%\item Monad transformers and why they don't compose nicely
+%\item Motivating example in \Idris{}
+%\item How to use it, how to create effects
+%\item How it works
+%\item Bigger example (CGI?)
+%\end{itemize}
 

@@ -1,5 +1,7 @@
 \section{The \Eff{} DSL implementation}
 
+\label{sect:effimpl}
+
 \begin{SaveVerbatim}{effdslstruct}
 data EffM : (m : Type -> Type) -> List EFFECT -> List EFFECT -> Type -> Type where
      value   : a -> EffM m xs xs a
@@ -258,7 +260,7 @@ eff {xs = [l ::: x]} env (l :- prog) k = let env' = unlabel {l} env in
 \useverb{effdslinterp}
 \end{center}
 \caption{The \Eff{} DSL interpreter}
-\label{effdsltype}
+\label{effdslimp}
 \end{figure*}
 
 

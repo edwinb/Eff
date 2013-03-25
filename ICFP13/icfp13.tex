@@ -60,8 +60,8 @@
 
 \begin{document}
 
-\title{Programming and Reasoning with Algebraic Effects}
-\subtitle{Or: $\Pi$, the Ultimate Monad Transformer}
+\title{Programming and Reasoning with Algebraic Effects and Dependent Types}
+%\subtitle{Or: $\Pi$, the Ultimate Monad Transformer}
 \authorinfo{Edwin C. Brady}
 {School of Computer Science, 
 University of St Andrews, St Andrews, Scotland.}
@@ -85,7 +85,7 @@ transformers can quickly become unwieldy when there are lots of effects to
 manage, leading to a temptation in larger programs to combine everything into
 one coarse-grained state and exception monad. In this paper I describe an
 alternative approach based on handling ~\remph{algebraic effects}, implemented
-in the Idris programming language. I show how to describe side effecting
+in the \Idris{} programming language. I show how to describe side effecting
 computations, how to write programs which compose multiple fine-grained
 effects, and how, using dependent types, we can use this approach to reason
 about states in effectful programs.
@@ -99,9 +99,9 @@ about states in effectful programs.
 
 \input{intro}
 
-\input{idrisintro}
+%\input{idrisintro}
 
-\input{effectsfp}
+%\input{effectsfp}
 
 %\input{algeffects}
 

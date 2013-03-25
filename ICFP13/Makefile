@@ -1,7 +1,7 @@
 all: icfp13.pdf
 
-SOURCES = icfp13.tex intro.tex effectsfp.tex idrisintro.tex effdsl.tex \
-          effimpl.tex \
+SOURCES = icfp13.tex intro.tex \
+          effdsl.tex effimpl.tex \
           appdesign.tex conclusions.tex library.bib macros.ltx library.ltx
 
 icfp13.pdf: ${SOURCES}
