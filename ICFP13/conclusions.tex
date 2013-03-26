@@ -43,6 +43,8 @@ partial evaluation~\cite{Brady2010} or, possibly better, a finally
 tagless approach~\cite{Carette2009}. Also need to ensure that the elaborator
 can handle large programs --- it has to do a lot of work.
 
+Error messages are quite noisy.
+
 Mixing control and resource effects is still a bit awkward --- can't yet
 thread state through all branches of a non-deterministic search, for example.
 If we could do this, could possibly support co-operative multithreading with

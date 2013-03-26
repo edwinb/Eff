@@ -4,7 +4,12 @@ In this section, I introduce \Eff{}, an embedded domain specific language
 for managing computational effects in \Idris{}. First, I describe how to
 \remph{use} effects which are already defined in the language in order to
 implement the evaluator described in the introduction. Then, I show how new
-effects may be implemented.
+effects may be implemented. 
+
+The framework consists of a DSL representation \texttt{Eff} for combining
+effects, \texttt{EffM} for combining mutable effects, and implementations
+of several predefined effects. We refer to the whole framework with the
+name \Eff{}.
 
 \label{sect:effdsl}
 
@@ -15,15 +20,19 @@ in the simplest case:
 
 \begin{SaveVerbatim}{efftype}
 
-Eff  : (m  : Type -> Type) -> 
-       (es : List EFFECT) -> 
-       (a  : Type) -> Type
+Eff : (m  : Type -> Type) -> 
+      (es : List EFFECT) -> (a  : Type) -> Type
 
 \end{SaveVerbatim}
 \useverb{efftype}
 
 \noindent
-This is parameterised over a \remph{computation context}, \texttt{m}, which
+Note that function types in \Idris{} take the form \texttt{(x : a) -> b}, with
+an optional name \texttt{x} on the domain of the function. This is primarily
+to allow the name \texttt{x} to be used in the codomain, although it is also
+useful for documenting the purpose of an argument.
+
+\texttt{Eff} is parameterised over a \remph{computation context}, \texttt{m}, which
 describes the context in which the effectful program will be run, a list
 of side effects \texttt{es} that the program is permitted to use, 
 and the program's return type \texttt{a}. The name \texttt{m} for the computation
@@ -44,6 +53,7 @@ RND       : EFFECT
 \end{SaveVerbatim}
 \useverb{effs}
 
+\noindent
 States are parameterised by the type of the state being carried, and exceptions
 are parameterisde by a type representing errors. File I/O is an effect which
 allows a single file to be processed, with the type giving the current state
@@ -63,6 +73,7 @@ an exception of type \texttt{Error} might have the following type:
 \end{SaveVerbatim}
 \useverb{exprog}
 
+\noindent
 More generally, a program might modify the set of effects available. This
 might be desirable for several reasons, such as wanting to add a new effect
 such as a new global state variable, or to update an index of a dependently
@@ -80,10 +91,10 @@ EffM : (m   : Type -> Type) ->
 \useverb{effmtype}
 
 \noindent
-This is parameterised over the computation context and type as before, but
-separates input effects (\texttt{es}) from output effects (\texttt{es'}).
-In fact, \texttt{Eff} is defined in terms of \texttt{EffM}, with equal input
-and output effects.
+\texttt{EffM} is parameterised over the context and type as before,
+but separates input effects (\texttt{es}) from output effects (\texttt{es'}).
+In fact, \texttt{Eff} is defined in terms of \texttt{EffM}, with equal
+input/output effects.
 
 \subsubsection{First example: State}
 
@@ -105,11 +116,22 @@ data Tree a = Leaf
 \noindent
 To tag each node in the tree, we write an effectful program which, for each
 node, tags the left subtree, reads and updates the state, tags the right
-subtree, then returns a new node with its value tagged:
+subtree, then returns a new node with its value tagged. The type
+states that the program requires an integer state:
+
+\begin{SaveVerbatim}{treelblty}
+
+tag : Tree a -> Eff m [STATE Int] (Tree (Int, a))
+
+\end{SaveVerbatim}
+\useverb{treelblty}
+
+\noindent
+The implementation traverses the tree, using \texttt{get} and \texttt{put}
+operations to read and write state:
 
 \begin{SaveVerbatim}{treelbl}
 
-tag : Tree a -> Eff m [STATE Int] (Tree (Int, a))
 tag Leaf = return Leaf
 tag (Node l x r) 
      = do l' <- tag l
@@ -122,8 +144,7 @@ tag (Node l x r)
 \useverb{treelbl}
 
 \noindent
-In the type, we list the available effects ---  in this case, 
-a single state. The \Eff{} language ensures, statically, that any
+The \Eff{} system ensures, statically, that any
 effectful functions which are called (\texttt{get}, and \texttt{put} here)
 require no more effects than are available --- there is no need for any
 \texttt{lift} to find the necessary effect. The types of these functions are:
@@ -335,13 +356,24 @@ rndInt : Int -> Int -> Eff m [RND] Int
 
 \noindent
 The evaluator itself is written as an instance of \texttt{Eff}, using
-\texttt{do}-notation as in the monad transformer implementation:
+\texttt{do}-notation as in the monad transformer implementation. The 
+type, again, lists the resources we require:
 
-
-\begin{SaveVerbatim}{langeff}
+\begin{SaveVerbatim}{langeffty}
 
 eval : Expr -> 
        Eff m [EXCEPTION String, RND, STATE Vars] t
+
+\end{SaveVerbatim}
+\useverb{langeffty}
+
+\noindent
+The implementation simply invokes the required effects \texttt{get},
+\texttt{raise} and \texttt{rndInt}, with the \Eff{} system checking that
+these effects are available:
+
+\begin{SaveVerbatim}{langeff}
+
 eval (Val x) = return x
 eval (Var x) = 
     do vs <- get
@@ -385,9 +417,8 @@ runEval env expr = run [(), 123456, env] (eval expr)
 
 \noindent
 Extending the evaluator with a new effect, such as \texttt{STDIO} is a matter
-of extending the list of available effects in its type, and instantiating 
-the \texttt{STDIO} resource, which is a unit. We could use this, for example,
-to print out the generated random numbers:
+of extending the list of available effects in its type.  We could use this, for
+example, to print out the generated random numbers:
 
 \begin{SaveVerbatim}{langeffio}
 
@@ -399,22 +430,46 @@ eval (Random upper) = do num <- rndInt 0 upper
                          putStrLn (show num)
                          return num
 
-runEval env expr = run [(), (), 123456, env] (eval expr)
-
 \end{SaveVerbatim}
 \useverb{langeffio}
 
 \noindent
 We can insert the \texttt{STDIO} effect anywhere in the list without difficulty
---- the only requirement is that its initial resource is in the corresponding
-position in the call to \texttt{run}.
+--- the only requirements are that its initial resource is in the corresponding
+position in the call to \texttt{run}, and that \texttt{run} instantiates
+a context which supports \texttt{STDIO}, such as \texttt{IO}:
 
+\begin{SaveVerbatim}{exprrun}
+
+runEval : List (String, Int) -> Expr -> IO Int
+runEval env expr 
+    = run [(), (), 123456, env] (eval expr)
+
+\end{SaveVerbatim}
+\useverb{exprrun}
 \subsection{Implementing effects}
 
 In order to implement a new effect, we define a new type (of kind \texttt{Effect})
 and explain how that effect is interpreted in some underlying context
-\texttt{m}. We have a type class, \texttt{Handler}, with a method \texttt{handle}
-explaining this interpretation:
+\texttt{m}. An \texttt{Effect} describes an effectful computation,
+parameterised by an input resource \texttt{res}, an output resource \texttt{res'}, 
+and the type of the computation \texttt{t}.
+
+\begin{SaveVerbatim}{effectty}
+
+Effect : Type
+Effect = (res : Type) -> (res' : Type) -> 
+         (t : Type) -> Type
+
+\end{SaveVerbatim}
+\useverb{effectty}
+
+\noindent
+Effects are typically described as algebraic data types. To \remph{run} an
+effect, they must be handled in some specific computation context \texttt{m}.
+We achieve this by making effects and contexts instances of a a type class,
+\texttt{Handler}, which has a method \texttt{handle} explaining this
+interpretation:
 
 \begin{SaveVerbatim}{effh}
 
@@ -426,6 +481,11 @@ class Handler (e : Effect) (m : Type -> Type) where
 \useverb{effh}
 
 \noindent
+Type classes in \Idris{} may be parameterised by anything --- not only types,
+but also values, and even other type classes. Thus, if a parameter is anything
+other than a \texttt{Type}, it must be given a type label explicitly, like
+\texttt{e} and \texttt{m} here.
+
 Handlers are parameterised by the effect they handle, and the context in which
 they handle the effect. This allows several different context-dependent
 handlers to be written --- e.g. exceptions could be handled differently in an
@@ -436,7 +496,6 @@ can be combined in the context in which the program is run.
 An effect \texttt{e res res' t} updates a resource type \texttt{res} to a
 resource type \texttt{res'}, returning a value \texttt{t}. The handler, therefore,
 implements this update, possibly performing side effects on the way.
-
 The handler is written in continuation passing style. This is for two reasons:
 Firstly, it returns two values, a new resource and the result of the computation,
 which is more cleanly managed in a continuation than by returning a tuple;
@@ -456,14 +515,16 @@ data EFFECT : Type where
 \useverb{efft}
 
 \noindent
-\texttt{MkEff} additionally takes the initial resource state of an effect.
+\texttt{MkEff} additionally records the resource state of an effect.
 In the remainder of this section, we describe how several effects can be
 implemented in this way: mutable state; console I/O; exceptions; files; random
 numbers, and non-determinism.
 
 \subsubsection{State}
 
-\ldots
+In general, effects are described algebraically in terms of the operations
+they support. In the case of \texttt{State}, the supported effects are reading
+the state (\texttt{Get}) and writing the state (\texttt{Put}).
 
 \begin{SaveVerbatim}{statealg}
 
@@ -474,6 +535,12 @@ data State : Effect where
 \end{SaveVerbatim}
 \useverb{statealg}
 
+\noindent
+The resource associated with a state corresponds to the state itself. So,
+the \texttt{Get} operation leaves this state intact (with a resource type
+\texttt{a} on entry and exit) but the \texttt{Put} operation may update this
+state (with a resource type \texttt{a} on entry and \texttt{b} on exit)
+--- that is, a \texttt{Put} may update the type of the stored value.
 We can implement a handler for this effect, for all contexts \texttt{m},
 as follows:
 
@@ -506,16 +573,22 @@ STATE t = MkEff t State
 \useverb{statepromote}
 
 \noindent
+Since an algebraic description of kind \texttt{Effect} is usable as a
+parameter to \texttt{Eff} by converting it to an \texttt{EFFECT}, we adopt the
+corresponding convention of using upper case names for values of type
+\texttt{EFFECT}.
+
 Algebraic effects are promoted to programs in \Eff{} by using the
-\texttt{effect} function. We will postpone giving the type of
-\texttt{effect} --- it is not important to know this for creating effects,
-and suffices to know that it converts an \texttt{Effect} to an effectful
-program. To create the \texttt{get} function in \Eff{}, for example:
+\texttt{mkEffect} function. We will postpone giving the type of
+\texttt{mkEffect} until Section \ref{sect:mkeffect} --- it is not important to
+know this for creating effects, and suffices to know that it converts an
+\texttt{Effect} to an effectful program. To create the \texttt{get} function in
+\Eff{}, for example:
 
 \begin{SaveVerbatim}{getdef}
 
 get : Eff m [STATE x] x
-get = effect Get 
+get = mkEffect Get 
 
 \end{SaveVerbatim}
 \useverb{getdef}
@@ -526,7 +599,7 @@ Implementing \texttt{put} is similar:
 \begin{SaveVerbatim}{putdef}
 
 put : x -> Eff m [STATE x] ()
-put val = effect (Put val)
+put val = mkEffect (Put val)
 
 \end{SaveVerbatim}
 \useverb{putdef}
@@ -534,12 +607,13 @@ put val = effect (Put val)
 \noindent
 We may also find it useful to mutate the \remph{type} of a state, considering
 that states may themselves have dependent types (we may, for example, add
-an element to a vector in a state). For this, we provide \texttt{putM}:
+an element to a vector in a state). The \texttt{Put} constructor supports this,
+so we can implement \texttt{putM} to update the state's type:
 
 \begin{SaveVerbatim}{putmdef}
 
 putM : y -> EffM m [STATE x] [STATE y] ()
-putM val = effect (Put val)
+putM val = mkEffect (Put val)
 
 \end{SaveVerbatim}
 \useverb{putmdef}
@@ -669,44 +743,71 @@ without executing any real I/O and possibly even proving theorems about them.
 
 \subsubsection{Exceptions}
 
+The exception effect supports only one operation, \texttt{Raise}.
+Exceptions are parameterised over the error type \texttt{e}, so \texttt{Raise}
+takes a single argument to represent the error. The associated resource is
+unit, and since raising an exception cause computation to abort, it can return
+a value of any type.
+
 \begin{SaveVerbatim}{exctype}
 
-data Exception : Type -> Type -> Type -> Type -> Type where
-     Raise : a -> Exception a () () b 
+data Exception : Type -> Effect where
+     Raise : e -> Exception e () () b 
 
 EXCEPTION : Type -> EFFECT
-EXCEPTION t = MkEff () (Exception t) 
+EXCEPTION e = MkEff () (Exception e) 
 
 \end{SaveVerbatim}
 \useverb{exctype}
 
+\noindent
+The semantics of \texttt{Raise} is to abort computation, therefore handlers
+of exception effects do not call the continuation \texttt{k}. In any case, 
+this should be impossible since passing the result to the continuation would
+require the ability to invent a value in any arbitrary type \texttt{b}!
+The simplest handler runs in a \texttt{Maybe} context:
+
 \begin{SaveVerbatim}{excmaybe}
 
 instance Handler (Exception a) Maybe where
-     handle _ (Raise e) k = Nothing
+     handle _ (Raise err) k = Nothing
 
 \end{SaveVerbatim}
 \useverb{excmaybe}
 
+\noindent
+Exceptions can be handled in any context which supports some representation of
+failed computations. In an \texttt{Either e} context, for example, we can
+use \texttt{Left} to represent the error case:
+
 \begin{SaveVerbatim}{exceither}
 
-instance Handler (Exception a) (Either a) where
-     handle _ (Raise e) k = Left e
+instance Handler (Exception e) (Either e) where
+     handle _ (Raise err) k = Left err
 
 \end{SaveVerbatim}
 \useverb{exceither}
 
+\noindent
 Given that we can raise exceptions in an \Eff{} program, it's also useful to be
-able to catch them.
+able to catch them. The \texttt{catch} operation runs a possibly failing
+computation \texttt{comp} in some context \texttt{m}, running \texttt{handler}
+if the computation fails:
 
 \begin{SaveVerbatim}{catch}
 
 catch : Catchable m err =>
-        EffM m xs xs' a -> (err -> EffM m xs xs' a) ->
+        (comp : EffM m xs xs' a) -> 
+        (handler : err -> EffM m xs xs' a) ->
         EffM m xs xs' a
 
 \end{SaveVerbatim}
 \useverb{catch}
+
+\noindent
+Using \texttt{catch} requires that the computation context \texttt{m} supports
+throwing and catching of errors, using the \texttt{Catchable} class implemented
+as part of the \Idris{} library:
 
 \begin{SaveVerbatim}{catchable}
 
@@ -717,9 +818,95 @@ class Catchable (m : Type -> Type) t where
 \end{SaveVerbatim}
 \useverb{catchable}
 
+\noindent
+This is implemented directly as part of the \Eff{} DSL --- any effectful
+computation may fail, and therefore implement a handler in a \texttt{Catchable}
+context after all. We have a simple instance for \texttt{Maybe}, provided that
+the error thrown is the unit error:
 
+\begin{SaveVerbatim}{catchablemaybe}
+
+instance Catchable Maybe () where
+    throw () = Nothing
+    catch Nothing  h = h ()
+    catch (Just x) h = Just x
+
+\end{SaveVerbatim}
+\useverb{catchablemaybe}
+
+\noindent
+The instance for \texttt{Either e} is similar, except that any type may be
+thrown as an error:
+
+\begin{SaveVerbatim}{catchableeither}
+
+instance Catchable (Either e) e where
+    throw x = Left x
+    catch (Left err) h = h err
+    catch (Right x)  h = (Right x)
+
+\end{SaveVerbatim}
+\useverb{catchableeither}
+
+\subsubsection{Random numbers}
+
+Random number generation can be implemented as an effect, with the resource
+tracking the \remph{seed} from which the next number will be generated.
+The \texttt{Random} effect supports one operation, \texttt{getRandom}, which
+requires an \texttt{Int} resource and returns the next number:
+
+\begin{SaveVerbatim}{randomeff}
+
+data Random : Type -> Type -> Type -> Type where
+     GetRandom : Random Int Int Int
+
+RND : EFFECT
+RND = MkEff Int Random
+
+\end{SaveVerbatim}
+\useverb{randomeff}
+
+\noindent
+Handling random number generation shows that it is a state effect in
+disguise, where the effect updates the seed according to a simple rule.
+This is a simple linear congruential pseudo-random number generator:
+
+\begin{SaveVerbatim}{randomhandle}
+
+instance Handler Random m where
+    handle seed GetRandom k
+         = let seed' = 1664525 * seed + 1013904223 in
+               k seed' seed'
+
+\end{SaveVerbatim}
+\useverb{randomhandle}
+
+\noindent
+Alternative handlers could use a different, possibly more secure approach.
+In any case, we can implement a top level function which returns a random
+number between a lower and upper bound as follows:
+
+\begin{SaveVerbatim}{rndint}
+
+rndInt : Int -> Int -> Eff m [RND] Int
+rndInt lower upper 
+    = do v <- mkEffect GetRandom 
+         return (v `mod` (upper - lower) + lower)
+
+\end{SaveVerbatim}
+\useverb{rndint}
 
 \subsubsection{Resource management: Files}
+
+Instead of implementing all I/O operations as a single effect, as with the
+\texttt{IO} monad, we can separate operations into more fine-grained effects.
+After Console I/O, another I/O related effect which we can handle separately
+is file management. Here, we can take advantage of the \remph{resource}
+associated with an effect, and the fact that resource types are \remph{mutable},
+by associating the file handling effect with an individual file, parameterised
+by its current state (i.e. closed, open for reading, or open for writing).
+File handles are represented as follows, where \texttt{File} is a primitive
+file handle provided by the \Idris{} library:
 
 \begin{SaveVerbatim}{fileeff}
 
@@ -732,6 +919,42 @@ data OpenFile : Mode -> Type where
 \useverb{fileeff}
 
 \noindent
+When we declare the \texttt{FileIO} algebraic effect type, we express in
+the resource transitions how each effect changes the state of the resource:
+
+\begin{SaveVerbatim}{fileio}
+
+data FileIO : Effect where
+     Open  : String -> (m : Mode) -> 
+             FileIO () (OpenFile m) ()
+     Close : FileIO (OpenFile m) () ()
+
+\end{SaveVerbatim}
+\useverb{fileio}
+
+\begin{SaveVerbatim}{fileio2}
+
+     ReadLine  : FileIO (OpenFile Read)  
+                        (OpenFile Read) String
+     WriteLine : String -> 
+                 FileIO (OpenFile Write) 
+                        (OpenFile Write) ()
+     EOF       : FileIO (OpenFile Read)  
+                        (OpenFile Read) Bool
+
+\end{SaveVerbatim}
+\useverb{fileio2}
+
+\noindent
+We can see from this declaration that opening a file moves from an empty
+resource to a file open for a specific purpose and that closing a file removes
+the file resource. Only files which are open for reading may be read, or tested
+for end of file, and only files open for writing may be written to. Any
+violation of this resource access protocol will result in a type error.
+In general, we can use the effect signature of a function to manage resources
+safely, subsuming the resource management DSL we have previously
+implemented~\cite{bradyresource}.
+
 The \texttt{FILE\_IO} effect is parameterised over the current state of a
 file resource with which it is associated:
 
@@ -743,9 +966,6 @@ FILE_IO : Type -> EFFECT
 \useverb{fileres}
 
 \noindent
-This means that the current state of a file handle is tracked in the resource
-and it is therefore possible to encode the protocol that files must be opened
-before being read, and closed before execution completes, in the type.
 The type of \texttt{open} expresses that the resource changes from a unit
 to an open file:
 
@@ -768,7 +988,6 @@ available:
 \begin{SaveVerbatim}{closeeff}
 
 close : EffM IO [FILE_IO (OpenFile m)] [FILE_IO ()] ()
-close = Close
 
 \end{SaveVerbatim}
 \useverb{closeeff}
@@ -782,35 +1001,80 @@ readLine : Eff IO [FILE_IO (OpenFile Read)] String
 
 \end{SaveVerbatim}
 \useverb{readeff}
-\subsubsection{Random numbers}
-
-\begin{SaveVerbatim}{randomeff}
-
-data Random : Type -> Type -> Type -> Type where
-     getRandom : Random Int Int Int
-
-\end{SaveVerbatim}
-\useverb{randomeff}
 
 \noindent
-Handling random number generation shows that it is a state effect in
-disguise, where the effect updates the seed according to a simple rule:
+As with \texttt{STATE}, we can use labelled resources if we require more than
+one file handle at a time. We have handlers for \texttt{FileIO} for the
+\texttt{IO} context, which does not handle exceptions (in which case failing
+to open a file is a fatal run-time error), and an \texttt{IOExcept e}
+context which is \texttt{IO} augmented with exceptions of type \texttt{e}
+and an instance of the \texttt{Catchable} class:
 
-\begin{SaveVerbatim}{randomhandle}
+\begin{SaveVerbatim}{ioexcept}
 
-instance Handler Random m where
-    handle seed getRandom k
-         = let seed' = 1664525 * seed + 1013904223 in
-               k seed' seed'
+data IOExcept err a
+ioe_lift : IO a -> IOExcept err a
+
+instance Catchable IOExcept err
 
 \end{SaveVerbatim}
-\useverb{randomhandle}
+\useverb{ioexcept}
+
+\noindent
+Assuming we are in a state where we have a file handle available and open
+for reading, we can read the contents of a file into a list of strings:
+
+\noindent
+\begin{SaveVerbatim}{readfile}
+
+ readLines : Eff (IOExcept String) 
+                [FILE_IO (OpenFile Read)] (List String)
+ readLines = readAcc [] where
+   readAcc : List String -> 
+             Eff (IOExcept String) 
+                 [FILE_IO (OpenFile Read)] (List String)
+   readAcc acc = do e <- eof
+                    if (not e)
+                       then do str <- readLine
+                               readAcc (str :: acc)
+                       else return (reverse acc)
+
+\end{SaveVerbatim}
+\useverb{readfile}
+
+\noindent
+To read a file, given a file path, into a list of strings, reporting an
+error where necessary, we can write the following \texttt{readFile}
+function. We add \texttt{STDIO} to the list of effects so that we can report
+an error to the console if opening the file fails:
+
+\noindent
+\begin{SaveVerbatim}{readfileproto}
+
+ readFile : String -> Eff (IOExcept String)
+                [FILE_IO (), STDIO] (List String)
+ readFile path = catch (do open path Read
+                           lines <- readLines
+                           close
+                           return lines)
+         (\err => do putStrLn ("Failed " ++ err)
+                     return [])
+
+\end{SaveVerbatim}
+\useverb{readfileproto}
+
+\noindent
+The effect type of \texttt{readFile} means that we must begin \remph{and} end
+with no open file. This means that omitting the \texttt{close} would result in
+a compile time type error. It would also be a type error to try to invoke
+\texttt{readLines} before the file was open, or if the file was opened for
+writing instead.
 
 \subsubsection{Non-determinism}
 
 Following~\cite{Bauer},
 non-determinism can be implemented as an effect \texttt{Selection},
-in which a \texttt{Select} chooses one value non-deterministically
+in which a \texttt{Select} operation chooses one value non-deterministically
 from a list of possible values:
 
 \begin{SaveVerbatim}{selecteff}
@@ -865,14 +1129,14 @@ attacks another if occupied by a Queen:
 
 no_attack : (Int, Int) -> (Int, Int) -> Bool
 no_attack (x, y) (x', y')
-   = x /= x' && y /= y' && abs (x - x') /= abs (y - y')
+  = x /= x' && y /= y' && abs (x - x') /= abs (y - y')
 
 \end{SaveVerbatim}
 \useverb{noattack}
 
 \noindent
 Then, given a column and a list of Queen positions, we find the rows on which
-a Queen may safely be placed in that column:
+a Queen may safely be placed in that column using a list comprehension:
 
 \begin{SaveVerbatim}{rowsin}
 
@@ -902,5 +1166,28 @@ addQueens col qs
 
 \noindent
 We can run this in \texttt{Maybe} context, to retrieve one solution, or in
-\texttt{List} context, to retrieve all solutions.
+\texttt{List} context, to retrieve all solutions. In a
+\texttt{Maybe} context, for example, we can define:
+
+\begin{SaveVerbatim}{getqueens}
+
+getQueens : Maybe (List (Int, Int))
+getQueens = run [()] (addQueens 8 [])
+
+\end{SaveVerbatim}
+\useverb{getqueens}
+
+\noindent
+Then to find the first solution, we can run \texttt{getQueens} at the \Idris{}
+REPL:
+
+\begin{SaveVerbatim}{queenmaybe}
+
+*Queens> show getQueens
+"Just [(4, 1), (2, 2), (7, 3), (3, 4), 
+       (6, 5), (8, 6), (5, 7), (1, 8)]" : String
+
+\end{SaveVerbatim}
+\useverb{queenmaybe}
+
 
