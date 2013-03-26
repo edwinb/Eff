@@ -2,13 +2,18 @@
 
 \label{sect:related}
 
-DDC, Frank, Koka, Eff~\cite{Bauer}.
+DDC~\cite{Lippmeier2009},
+Frank\footnote{\url{https://personal.cis.strath.ac.uk/conor.mcbride/pub/Frank/}},
+Koka\footnote{\url{http://research.microsoft.com/en-us/projects/koka/}},
+Eff~\cite{Bauer,Pretnar2010}.
 
 Unlike these other implementations, rather than building a language around
 an algebraic effect system, we have taken the theory of algebraic effects and
 implemented it directly in a general purpose programming language.
 
-Relationship with monad transformers.  Earlier PADL work~\cite{bradyresource}.
+Relationship with monad transformers.  
+Work with monads, not against them!
+Earlier PADL work~\cite{bradyresource}.
 
 Xi, imperative programming with dependent types~\cite{Xi2000}.
 Typestate?~\cite{Strom1986,Aldrich2009}
@@ -22,6 +27,12 @@ Theoretical work on effects: Plotkin, Power, Kammar, etc. Free monads?
 \section{Conclusions}
 
 \label{sect:conclusion}
+
+What dependent type features did we need? Obvious question: what would
+it take to do this in Haskell? We used dependent types in a fairly limited
+way, but it felt quite naturaly. Is it worth bending Haskell to o this
+unnaturally, or should we just wait until it supports DTP more? Or forget it?
+
 
 Strengths: monad transformers not needed. Lift automatic, can permute effects
 without need to change program. Flexibility. Easy to read and write.

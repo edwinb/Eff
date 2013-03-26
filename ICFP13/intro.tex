@@ -61,8 +61,8 @@ eval (Var x) = do env <- ask
 \noindent
 Here, the \texttt{Maybe} monad captures possible failure, and is transformed
 into a reader monad using the \texttt{ReaderT} transformer to store the
-environment. The \texttt{lift} operation allows functions in the inner
-\texttt{Maybe} monad to be called.  
+environment, which is retrieved using \texttt{ask}. The \texttt{lift} operation
+allows functions in the inner \texttt{Maybe} monad to be called.  
 We can extend the language further, with random number generation:
 
 \begin{SaveVerbatim}{exprlang3}
@@ -116,18 +116,24 @@ reducing the possibility of errors.
 
 In this paper, I present an alternative approach to combining effects in
 a pure functional programming language, based on handlers of
-\remph{algebraic effects}~\cite{Bauer}.
-We implement this approach directly as a domain specific language embedded
+\remph{algebraic effects}~\cite{Bauer}, and
+implemented directly as a domain specific language embedded
 in a dependently typed host language, \Idris{}~\cite{Brady2013,idristutorial}.
 
 \subsection{Contributions}
 
+This paper takes as its hypothesis that algebraic effects provide a cleaner,
+more composable and more flexible notation for programming with side effects
+than monad transformers. Although they are not equivalent in power --- monads
+and monad transformers can express more concepts --- many common effectful
+computations are captured. 
 The main contribution of this paper is a notation for describing and combining
-side effects using \Idris{}. More specifically, the paper makes the
-following contributions:
+side effects using \Idris{}. More specifically:
+
+%, the paper makes the following contributions:
 
 \begin{itemize}
-\item An Embedded Domain Specifc Language, \Eff{}, for capturing \emph{algebraic
+\item An Embedded Domain Specific Language (DSL), \Eff{}, for capturing \emph{algebraic
 effects}, in such a way that they are easily composable, and translatable to a
 variety of underlying contexts using \emph{effect handlers}.
 % \item An extension of the DSL for tracking the \emph{state} of resources
@@ -145,13 +151,13 @@ illustrate how effectful applications may be structured.
 \end{itemize}
 
 \noindent
-The library makes essential use of \emph{dependent types}, firstly to verify
+The \Eff{} DSL makes essential use of \emph{dependent types}, firstly to verify
 that a specific effect is available to an effectful program using simple
 automated theorem proving, and secondly to track the state of a resource by
 updating its type during program execution. In this way, we can use the \Eff{}
-language to verify implementations of resource usage protocols.
+DSL to verify implementations of resource usage protocols.
 
-I describe how to \remph{use} the \Eff{} language in Section \ref{sect:effdsl},
+I describe how to \remph{use} \Eff{} in Section \ref{sect:effdsl},
 how it is implemented in Section \ref{sect:effimpl}, and give a larger example
 in Section \ref{sect:impint}. It is distributed with
 \Idris{}\footnote{\url{http://idris-lang.org/}}. All of the examples in this

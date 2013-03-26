@@ -1,8 +1,12 @@
 \section{\Eff{}: an Embedded DSL for Effects Management} 
 
 In this section, I introduce \Eff{}, an embedded domain specific language
-for managing computational effects in \Idris{}. First, I describe how to
-\remph{use} effects which are already defined in the language in order to
+for managing computational effects in \Idris{}. I will introduce specific
+distinctive features of \Idris{} as required --- in particular, we will
+use implicit conversions and default implicit arguments in the implementation
+of \Eff{} --- a full tutorial is available elsewhere~\cite{idristutorial}.  
+First, I describe how to
+use effects which are already defined in the language in order to
 implement the evaluator described in the introduction. Then, I show how new
 effects may be implemented. 
 
@@ -39,8 +43,9 @@ and the program's return type \texttt{a}. The name \texttt{m} for the computatio
 context is suggestive of a monad --- the computation context most commonly 
 is a monad but there is no requirement for it to be so.
 
-Side effects are described using the \texttt{EFFECT} type, with the following
-among the predefined effects:
+Side effects are described using the \texttt{EFFECT} type --- we will refer
+to these as \remph{concrete} effects.  The following are 
+among the predefined concrete effects:
 
 \begin{SaveVerbatim}{effs}
 
@@ -55,7 +60,7 @@ RND       : EFFECT
 
 \noindent
 States are parameterised by the type of the state being carried, and exceptions
-are parameterisde by a type representing errors. File I/O is an effect which
+are parameterised by a type representing errors. File I/O is an effect which
 allows a single file to be processed, with the type giving the current state
 of the file (i.e. closed, open for reading, or open for writing). The
 \texttt{STDIO} effect permits console I/O, and \texttt{RND} permits random
@@ -75,10 +80,9 @@ an exception of type \texttt{Error} might have the following type:
 
 \noindent
 More generally, a program might modify the set of effects available. This
-might be desirable for several reasons, such as wanting to add a new effect
-such as a new global state variable, or to update an index of a dependently
-typed state. In this case, we describe programs using the \texttt{EffM}
-data type:
+might be desirable for several reasons, such as adding a new effect, or to
+update an index of a dependently typed state. In this case, we describe
+programs using the \texttt{EffM} data type:
 
 \begin{SaveVerbatim}{effmtype}
 
@@ -145,9 +149,9 @@ tag (Node l x r)
 
 \noindent
 The \Eff{} system ensures, statically, that any
-effectful functions which are called (\texttt{get}, and \texttt{put} here)
-require no more effects than are available --- there is no need for any
-\texttt{lift} to find the necessary effect. The types of these functions are:
+effectful functions which are called (\texttt{get} and \texttt{put} here)
+require no more effects than are available.
+The types of these functions are:
 
 \begin{SaveVerbatim}{getputty}
 
@@ -189,7 +193,10 @@ runPure : Env id es -> EffM id es es' a -> a
 \useverb{runeffs}
 
 \noindent
-The only reason \texttt{run} needs \texttt{m} to be an applicative functor
+Corresponding functions \texttt{runEnv}, \texttt{runWithEnv} and
+\texttt{runPureEnv} are also available for cases when the final resources are
+required.  The only reason \texttt{run} needs \texttt{m} to be an applicative
+functor
 is that it uses \texttt{pure} to inject a pure value into \texttt{m}. If this
 is inconvenient, \texttt{runWith} can be used instead. Note that, unlike the
 monad transformer approach, there is no assumption or requirement that
@@ -209,7 +216,7 @@ for the initial resources \texttt{es}.
 
 When we invoke effectful functions such as \texttt{get} and \texttt{put},
 the \Eff{} language internally searches through the list of available effects
-to check that it is support, and invokes the effect using the corresponding
+to check that it is supported, and invokes the effect using the corresponding
 resource. This leads to an important question: what if we have more than one 
 effect which supports the function? A particular situation where this arises
 is when we have more than one integer state.
@@ -225,6 +232,7 @@ tagCount : Tree a ->
 \end{SaveVerbatim}
 \useverb{treelblcount}
 
+\noindent
 What should be the effect of \texttt{get} and \texttt{put} in this program?
 Do they read and update the first state, the second, or choose
 non-deterministically? 
@@ -331,7 +339,7 @@ tagCountFrom x t
 Recall the effectful evaluator in the introduction. To implement this
 in the \Eff{} language, we must support exceptions, a state containing the
 current environment, and random number generation. Environments are
-represented as a list of mappings from \texttt{String} to \texttt{Int}
+represented as a list of mappings from \texttt{String} to \texttt{Int}:
 
 \begin{SaveVerbatim}{langenv}
 
@@ -355,7 +363,7 @@ rndInt : Int -> Int -> Eff m [RND] Int
 \useverb{efftypes}
 
 \noindent
-The evaluator itself is written as an instance of \texttt{Eff}, using
+The evaluator itself is written in the \texttt{Eff} type, using
 \texttt{do}-notation as in the monad transformer implementation. The 
 type, again, lists the resources we require:
 
@@ -560,9 +568,9 @@ continuation \texttt{k}) as well as the return value of the computation (the
 second argument of the continuation). When running \texttt{Put}, the new state
 is passed to the continuation as the new resource value.
 
-We then convert the algebraic effect \texttt{State} to be usable in an
-\Eff{} program using the \texttt{STATE} function, to which we provide the
-initial state type as folllows:
+We then convert the algebraic effect \texttt{State} to a concrete
+effect usable in an \Eff{} program using the \texttt{STATE} function, to which
+we provide the initial state type as folllows:
 
 \begin{SaveVerbatim}{statepromote}
 
@@ -573,12 +581,12 @@ STATE t = MkEff t State
 \useverb{statepromote}
 
 \noindent
-Since an algebraic description of kind \texttt{Effect} is usable as a
-parameter to \texttt{Eff} by converting it to an \texttt{EFFECT}, we adopt the
-corresponding convention of using upper case names for values of type
-\texttt{EFFECT}.
+We adopt the convention that algebraic effects, of type \texttt{Effect},
+have an initial upper case letter. Concrete effects, of type \texttt{EFFECT},
+are correspondingly in all upper case.
 
-Algebraic effects are promoted to programs in \Eff{} by using the
+Algebraic effects are promoted to \Eff{} programs with concrete effects
+by using the
 \texttt{mkEffect} function. We will postpone giving the type of
 \texttt{mkEffect} until Section \ref{sect:mkeffect} --- it is not important to
 know this for creating effects, and suffices to know that it converts an
@@ -1190,4 +1198,11 @@ REPL:
 \end{SaveVerbatim}
 \useverb{queenmaybe}
 
-
+\noindent
+\textbf{Remark:} It is important to note that when combining \texttt{SELECT}
+with other effects, the values of other resources are reset at the beginning
+of each \texttt{select} branch. This means, at least in the current implementation,
+that state cannot be shared between branches. While perhaps not so important
+for selection, this may be a problem for other control effects such as 
+co-operative multithreading, for which we may need a more flexible handler if
+we wish to deal with shared state. We will deal with this issue in future work.

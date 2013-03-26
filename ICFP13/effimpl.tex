@@ -4,13 +4,15 @@
 
 \begin{SaveVerbatim}{effdslstruct}
 data EffM : (m : Type -> Type) -> List EFFECT -> List EFFECT -> Type -> Type where
-     value     : a -> EffM m xs xs a
-     (>>=)     : EffM m xs xs' a -> (a -> EffM m xs' xs'' b) -> EffM m xs xs'' b
-     mkEffectP : (prf : EffElem e a xs) -> (eff : e a b t) -> EffM m xs (updateResTy xs prf eff) t
-     liftP     : (prf : SubList ys xs) -> EffM m ys ys' t -> EffM m xs (updateWith ys' xs prf) t
+     return    : a -> EffM m es es a
+     (>>=)     : EffM m es es' a -> (a -> EffM m es' es'' b) -> EffM m es es'' b
+     mkEffectP : (prf : EffElem e a es) -> (eff : e a b t) -> EffM m es (updateResTy es prf eff) t
+     liftP     : (prf : SubList fs es) -> EffM m fs fs' t -> EffM m es (updateWith fs' es prf) t
      (:-)      : (l : ty) -> EffM m [x] [y] t -> EffM m [l ::: x] [l ::: y] t
-     new       : Handler e m => res -> EffM m (MkEff res e :: xs) (MkEff res' e :: xs') a -> EffM m xs xs' a
-     catch     : Catchable m err => EffM m xs xs' a -> (err -> EffM m xs xs' a) -> EffM m xs xs' a
+     new       : Handler e m => 
+                 res -> EffM m (MkEff res e :: es) (MkEff res' e :: es') a -> EffM m es es' a
+     catch     : Catchable m err => 
+                 EffM m es es' a -> (err -> EffM m es es' a) -> EffM m es es' a
 \end{SaveVerbatim}
 
 \begin{figure*}[t]
@@ -21,19 +23,30 @@ data EffM : (m : Type -> Type) -> List EFFECT -> List EFFECT -> Type -> Type whe
 \label{effdsltype}
 \end{figure*}
 
+The implementation of \Eff{} follows a common pattern in dependently typed DSL
+implementation, that of the well-typed
+interpreter~\cite{augustsson1999exercise,Brady2006a,Pasalic2002}. We describe
+the DSL as a data type, \texttt{EffM} which expresses the properties programs
+must satisfy in its type, with a corresponding interpreter. The type sfstem of
+\Idris{} guarantees that only programs which satisfy the necessary properties 
+can be interpreted.
+
 \subsection{Language representation}
 
-The \Eff{} language is implemented as a syntax tree \texttt{EffM}
-plus a tagless interpreter, where the
-types in the syntax tree ensure that all \Eff{} programs are well typed.
-The language itself as parameterised over its computation context \texttt{m},
+%The \Eff{} language is implemented as a syntax tree \texttt{EffM}
+%plus a tagless interpreter, where the
+%types in the syntax tree ensure that all \Eff{} programs are well typed.
+
+The \texttt{EffM} data type represents the \Eff{} language constructs.
+It is parameterised over its computation context \texttt{m},
 and indexed by the list of effects on input and the list of effects on output,
 as well as the return type of the computation:
 
 \begin{SaveVerbatim}{effty}
 
-EffM : (m : Type -> Type) -> 
-       List EFFECT -> List EFFECT -> Type -> Type
+data EffM : (m   : Type -> Type) -> 
+            (es  : List EFFECT) -> 
+            (es' : List EFFECT) -> (a : Type) -> Type
 
 \end{SaveVerbatim}
 \useverb{effty}
@@ -44,8 +57,9 @@ the output effects, we define \texttt{Eff}:
 
 \begin{SaveVerbatim}{effimmutable}
 
-Eff : (Type -> Type) -> List EFFECT -> Type -> Type
-Eff m xs t = EffM m xs xs t
+Eff : (m : Type -> Type) -> 
+      (es : List EFFECT) -> (a : Type) -> Type
+Eff m es t = EffM m es es t
 
 \end{SaveVerbatim}
 \useverb{effimmutable}
@@ -54,6 +68,11 @@ Eff m xs t = EffM m xs xs t
 The complete syntax is given in Figure \ref{effdsltype} for reference. In this
 section, we describe the constructs in detail.
 
+\textbf{Remark: } One way of looking at \texttt{EffM} is as a flexible monad
+transformer, augmenting an underlying monad with additional features. In this way
+we can combine algebraic effects with concepts more difficult to capture, such
+as partiality and continuations.
+
 \subsubsection{Basic constructs}
 
 In the simplest case, we would like to inject pure values into the
@@ -61,131 +80,229 @@ In the simplest case, we would like to inject pure values into the
 
 \begin{SaveVerbatim}{effval}
 
-value : a -> EffM m xs xs a
+return : a -> EffM m es es a
 
 \end{SaveVerbatim}
 \useverb{effval}
 
-We have \texttt{(>==)} to support \texttt{do} notation:
+\noindent
+Additionally, we have \texttt{(>>=)} to support \texttt{do} notation:
 
 \begin{SaveVerbatim}{effbind}
 
-(>>=) : EffM m xs xs' a -> 
-        (a -> EffM m xs' xs'' b) -> EffM m xs xs'' b
+(>>=) : EffM m es es' a -> 
+        (a -> EffM m es' es'' b) -> EffM m es es'' b
 
 \end{SaveVerbatim}
 \useverb{effbind}
 
+\noindent
+The type of \texttt{(>>=)} expresses that available effects may change,
+transitively, across a program. The output of the first action, \texttt{es'}
+becomes the input to the second.
+
+\textbf{Remark:} \Idris{} allows ad-hoc name overloading, as well as overloading via type classes.
+Since it does not support type inference at the top level, as full type inference
+is undecidable for dependently typed languages, such overloading can be
+resolved in a type directed way.
+It is important here, since we cannot make
+\texttt{EffM} an instance of \texttt{Monad}, but we would like to use
+\texttt{do}-notation as a natural way of implementing imperative code.
+
 \subsubsection{Invoking effects}
 
-\subsubsection*{Directly invoking effects}
+Recall that algebraic effects are promoted to \Eff{} programs using concrete
+effects with the \texttt{mkEffect} function, the type of which has so far
+been postponed. We can invoke effects using a helper, \texttt{mkEffectP}, which
+requires a \remph{proof}, \texttt{prf},
+that the effect we are invoking is available:
 
 \begin{SaveVerbatim}{effinvoke}
 
-mkEffectP : (prf : EffElem e a xs) -> (eff : e a b t) -> 
-          EffM m xs (updateResTy xs prf eff) t
+mkEffectP : (prf : EffElem e a es) -> 
+            (eff : e a b t) -> 
+            EffM m es (updateResTy es prf eff) t
 
 \end{SaveVerbatim}
 \useverb{effinvoke}
 
-\begin{SaveVerbatim}{}
-
-updateResTy : (xs : List EFFECT) -> 
-              EffElem e a xs -> e a b t -> List EFFECT
-updateResTy {b} (MkEff a e :: xs) Here      n 
-                 = (MkEff b e) :: xs
-updateResTy     (x :: xs)         (There p) n 
-                 = x :: updateResTy xs p n
-
-\end{SaveVerbatim}
-\useverb{}
+\noindent
+If we are invoking an effect \texttt{eff}, provided by the algebraic effect
+\texttt{e}, with an input resource type \texttt{a},
+this is valid only if we can provide a proof that the algebraic effect is
+present in the input set of resources \texttt{es}. This concept is captured
+in the \texttt{EffElem} predicate:
 
 \begin{SaveVerbatim}{effelem}
 
 data EffElem : (Type -> Type -> Type -> Type) -> 
                Type -> List EFFECT -> Type where
-     Here : EffElem x a (MkEff a x :: xs)
-     There : EffElem x a xs -> EffElem x a (y :: xs)
+     Here : EffElem x a (MkEff a x :: es)
+     There : EffElem x a es -> EffElem x a (y :: es)
 
 \end{SaveVerbatim}
 \useverb{effelem}
 
-\Idris{} currently has very limited proof search capabilities, but they
-are sufficient for constructing proofs of \texttt{EffElem x xs} automatically.
-If a list is statically known, we can find a proof
-by a brute force search, if \texttt{x} is an available effect. If not, we limit
-the search depth:
+\noindent
+This proof serves two purposes. Firstly, it provides a guarantee that the effect
+is available with the correct resource type. Secondly, as we shall see shortly,
+it serves as an index into the resource set when we \remph{evaluate} programs
+and when compute the list of output resources.
+
+After the effect has been executed, its resource type may have been updated.
+We must therefore update the output resource state. Again, we use the structure
+of the proof, to update the resource type from \texttt{a} to \texttt{b}.
+
+\begin{SaveVerbatim}{updateresty}
+
+updateResTy : (es : List EFFECT) -> 
+              EffElem e a es -> e a b t -> List EFFECT
+updateResTy {b} (MkEff a e :: es) Here      n 
+                 = (MkEff b e) :: es
+updateResTy     (x :: es)         (There p) n 
+                 = x :: updateResTy es p n
+
+\end{SaveVerbatim}
+\useverb{updateresty}
+
+\noindent
+The problem with \texttt{mkEffectP} is that we must provide an 
+explicit proof that the effect is available. Since the effect list is statically
+known, \Idris{} ought to be able to find such a proof automatically.
+
+\Idris{} currently has very limited proof search capabilities, based on
+reflection and reification of \Idris{} programs, but they
+are sufficient for constructing the required proofs. The reflection mechanism
+itself is beyond the scope of this paper. Briefly, we have
+the following function, which constructs a tactic for searching for proofs 
+of \texttt{EffElem}:
 
 \begin{SaveVerbatim}{findeff}
 
-findEffElem : Nat -> Tactic 
-findEffElem O = Refine "Here" `Seq` Solve 
-findEffElem (S n) = GoalType "EffElem" 
-      (Try (Refine "Here" `Seq` Solve)
-           (Refine "There" `Seq` 
-                   (Solve `Seq` findEffElem n)))
+findEffElem : Tactic 
 
 \end{SaveVerbatim}
 \useverb{findeff}
 
 \noindent
-This could be improved with a simple reflection mechanism to allow the proof
-search to inspect the goal --- this will be added in a future version of \Idris{}.
-In practice, we have found the brute force approach to be adequate. Once we
-have proof search, we can use the default implicit argument mechanism to
-invoke proof search automatically:
+Then, we have a notation for giving \remph{default} implicit arguments to
+functions. The \texttt{mkEffect} function is a wrapper for \texttt{mkEffectP}
+with a default argument which invokes the \texttt{findEffElem} tactic. If
+the proof search fails, this causes a compile time error, reporting that the
+effect is not available.
 
 \label{sect:mkeffect}
 \begin{SaveVerbatim}{impeff}
 
 mkEffect : {default tactics { 
-                       reflect findEffElem 100; 
-                       solve; 
+                       reflect findEffElem; 
                     } 
-              prf : EffElem e a xs} -> 
+              prf : EffElem e a es} -> 
            (eff : e a b t) -> 
-           EffM m xs (updateResTy xs prf eff) t
+           EffM m es (updateResTy es prf eff) t
 mkEffect {prf} e = mkEffectP prf e
 
 \end{SaveVerbatim}
 \useverb{impeff}
 
-\subsubsection*{Effectful subprograms}
+\noindent
+Fortunately, there is no need for a user of the library to know anything about
+this proof search mechanism. Tactic construction for automated proof search is
+related to the \texttt{Ltac}~\cite{Delahaye2000} system in Coq, the intention
+being to make simple proofs automatable.
+
+\subsubsection{Effectful sub-programs}
+
+As well as invoking algebraic effects directly, we would like to be able to
+invoke effectful sub-programs, which may use all of the effects available, or
+a subset. To achieve this, we use the \texttt{liftP} construct:
 
 \begin{SaveVerbatim}{efflift}
 
-lift : (prf : SubList ys xs) ->
-       EffM m ys ys' t -> 
-       EffM m xs (updateWith ys' xs prf) t
+liftP : (prf : SubList fs es) ->
+        (prog : EffM m fs fs' t) -> 
+        EffM m es (updateWith fs' es prf) t
 
 \end{SaveVerbatim}
 \useverb{efflift}
+
+\noindent
+This requires a proof that the effects available to the sub-program \texttt{prog}
+are a subset (strictly, a sub-list) of the effects available to the outer program,
+expressed using the following predicate:
 
 \begin{SaveVerbatim}{sublist}
 
 data SubList : List a -> List a -> Type where
      SubNil : SubList [] []
-     Keep   : SubList xs ys -> 
-              SubList (x :: xs) (x :: ys)
-     Drop   : SubList xs ys -> 
-              SubList xs (x :: ys)
+     Keep   : SubList es fs -> 
+              SubList (x :: es) (x :: fs)
+     Drop   : SubList es fs -> 
+              SubList es (x :: fs)
 
 \end{SaveVerbatim}
 \useverb{sublist}
 
+\noindent
+This predicate describes a sublist in terms of a larger list by saying, for each
+element of the larger list, whether it is kept or dropped. An alternative
+base case could state that \texttt{[]} is a sub-list of any list, assuming
+that remaining items are dropped.
+
+The sub-program may itself update the effects it uses, so again the proof serves
+two purposes: Firstly, to ensure the effects are indeed available; and secondly,
+to be able to update the effects in the outer program once the sub-program is
+complete, as follows:
+
 \begin{SaveVerbatim}{updwith}
 
-updateWith : (ys' : List a) -> (xs : List a) ->
-             SubList ys xs -> List a
-updateWith (y :: ys) (x :: xs) (Keep rest) 
-           = y :: updateWith ys xs rest
-updateWith ys        (x :: xs) (Drop rest) 
-           = x :: updateWith ys xs rest
-updateWith []        []        SubNil      
-           = []
+updateWith : (fs' : List a) -> (es : List a) ->
+             SubList fs es -> List a
+updateWith (y :: fs) (x :: es) (Keep rest) 
+           = y :: updateWith fs es rest
+updateWith fs        (x :: es) (Drop rest) 
+           = x :: updateWith fs es rest
+updateWith []        []        SubNil      = []
 
 \end{SaveVerbatim}
 \useverb{updwith}
+
+\noindent
+Again, we can construct the necessary proofs of \texttt{SubList} automatically,
+if the sub-program uses a valid set of effects, because all effects are
+statically known, using a reflected tactic \texttt{findSubList}. We implement
+a wrapper \texttt{lift} which builds this proof implicitly:
+
+\begin{SaveVerbatim}{liftimp}
+
+implicit
+lift : {default tactics { 
+                   reflect findSubList;  
+                }
+          prf : SubList ys xs} ->
+       (prog : EffM m ys ys' t) -> 
+       EffM m xs (updateWith ys' xs prf) t
+lift {prf} e = lift prf e
+
+\end{SaveVerbatim}
+\useverb{liftimp}
+
+\noindent
+The \texttt{implicit} modifier before \texttt{lift} states that this function
+can be used as an \remph{implicit conversion}. Implicit conversions are inspired
+by a similar feature in Scala~\cite{Scala} --- the effect of the \texttt{implicit}
+modifier is, intuitively, that \texttt{lift} will be applied if required to
+a program in \texttt{EffM} if it is required for type correctness. It is
+simple to check if an implicit conversion is required during type 
+checking --- since type checking is type directed we always have access to the
+required type of an expression, and the implicit coercions which produce
+that type.
+
+Such conversions are, deliberately, limited. They cannot be chained, unlike
+implicit coercions in Coq, to avoid coherence problems. Furthermore, to avoid
+ambiguity problems, if there is more than one implicit conversion available
+then \remph{neither} will be applied. In the \Eff{} library, only \texttt{lift}
+is implicit.
 
 \subsubsection{Labelling effects}
 
@@ -201,7 +318,12 @@ If we have an effectful program \texttt{p} with a single effect, we can
 \end{SaveVerbatim}
 \useverb{lblintro}
 
-[Example here]
+\noindent
+It is sufficient to handle single effects here, because labels can only
+apply to one effect at a time, and such effectful sub-programs can easily
+be invoked using an implicit \texttt{lift} as described above. Labelling
+effects does nothing more than adding a label to the effect and its corresponding
+resource.
 
 \subsubsection{Introducing effects}
 
@@ -210,19 +332,23 @@ that the effect can be handled in the current computation context \texttt{m}:
 
 \begin{SaveVerbatim}{neweff}
 
-new : Handler e m => res -> 
-      EffM m (MkEff res e :: xs) 
-             (MkEff res' e :: xs') a ->
-      EffM m xs xs' a
+new : Handler e m => 
+      res -> EffM m (MkEff res e :: es) 
+                    (MkEff res' e :: es') a ->
+      EffM m es es' a
 
 \end{SaveVerbatim}
 \useverb{neweff}
 
 \noindent
-Once the subprogram is complete, the resource for the new effect is discarded,
+This extends the list of effects, initialised with
+a resource of type \texttt{res}.
+Once the sub-program is complete, the resource for the new effect is discarded,
 as is clear from the type of \texttt{new}.
 
-[Example here]
+Note that the effect itself, \texttt{e}, is never given explicitly here. This
+means that it must be clear from the sub-program what the effect is. Typically,
+this means that the sub-program will be a function with an explicit type.
 
 \subsubsection{Handling failure}
 
@@ -232,28 +358,36 @@ we can use the \texttt{catch} construct to handle errors:
 \begin{SaveVerbatim}{catcheff}
 
 catch : Catchable m err =>
-        EffM m xs xs' a -> (err -> EffM m xs xs' a) ->
-        EffM m xs xs' a
+        (prog : EffM m es es' a) -> 
+        (handler : err -> EffM m es es' a) ->
+        EffM m es es' a
 
 \end{SaveVerbatim}
 \useverb{catcheff}
 
+\noindent
+If the sub-program \texttt{prog} fails with an error, of type \texttt{err}, then
+the handler is called, being passed the error. Note that both \texttt{prog}
+and \texttt{handler} transform the effect list from \texttt{es} to \texttt{es'}.
+If \texttt{prog} fails, then the resources are reset to the state there were in
+at the start. This requires some care, if the effect refers to external
+resources such as file handles.
 
 \subsection{The \Eff{} interpreter}
 
 \begin{SaveVerbatim}{effdslinterp}
-eff : Env m xs -> EffM m xs xs' a -> (Env m xs' -> a -> m b) -> m b
-eff env (value x) k = k env x
-eff env (prog `ebind` c) k = eff env prog (\env', p' => eff env' (c p') k)
-eff env (mkEffectP prf effP) k = execEff env prf effP k
-eff env (liftP prf effP) k = let env' = dropEnv env prf in 
-                                 eff env' effP (\envk, p' => k (rebuildEnv envk prf env) p')
-eff env (new r prog) k = let env' = r :: env in 
-                             eff env' prog (\ (v :: envk), p' => k envk p')
-eff env (catch prog handler) k = catch (eff env prog k)
-                                       (\e => eff env (handler e) k)
-eff {xs = [l ::: x]} env (l :- prog) k = let env' = unlabel {l} env in
-                                             eff env' prog (\envk, p' => k (relabel l envk) p')
+effInt : Env m es -> EffM m es es' a -> (Env m es' -> a -> m b) -> m b
+effInt env (return x) k = k env x
+effInt env (prog `ebind` c) k = effInt env prog (\env', p' => effInt env' (c p') k)
+effInt env (mkEffectP prf effP) k = execEff env prf effP k
+effInt env (liftP prf effP) k = let env' = dropEnv env prf in 
+                                    effInt env' effP (\envk, p' => k (rebuildEnv envk prf env) p')
+effInt env (new r prog) k = let env' = r :: env in 
+                                effInt env' prog (\ (v :: envk), p' => k envk p')
+effInt env (catch prog handler) k = catch (effInt env prog k)
+                                          (\e => effInt env (handler e) k)
+effInt env (l :- prog) k = let env' = unlabel env in
+                                      effInt env' prog (\envk, p' => k (relabel l envk) p')
 \end{SaveVerbatim}
 
 \begin{figure*}[t]
@@ -264,6 +398,22 @@ eff {xs = [l ::: x]} env (l :- prog) k = let env' = unlabel {l} env in
 \label{effdslimp}
 \end{figure*}
 
+Running an effectful program, of type \texttt{EffM m es es' t}, should yield
+a computation of type \texttt{m t}, that is, the program returns a value of type
+\texttt{t} in some computation context \texttt{m}. We can interpret programs
+mostly through a simple traversal of the \texttt{EffM} syntax, subjet to the
+following considerations:
+
+\begin{itemize}
+\item We need to keep track of \remph{resources} corresponding to each effect.
+\item We need to invoke the appropriate handlers where necessary.
+\item We need to return two values as part of the computation: the result
+\texttt{t} and an updated collection resources.
+\end{itemize}
+
+\noindent
+To keep track of resources, we build an environment as a heterogenous list to
+store the resource corresponding to each effect:
 
 \begin{SaveVerbatim}{resenv}
 
@@ -271,43 +421,180 @@ data Env  : (m : Type -> Type) ->
             List EFFECT -> Type where
      Nil  : Env m Nil
      (::) : Handler eff m => 
-            a -> Env m xs -> Env m (MkEff a eff :: xs)
+            a -> Env m es -> Env m (MkEff a eff :: es)
 
 \end{SaveVerbatim}
 \label{sect:envdef}
 \useverb{resenv}
 
-\begin{SaveVerbatim}{invokehandler}
+\noindent
+Using the (overloaded) \texttt{Nil} and \texttt{(::)} gives us access to list
+syntax for environments. They are parameterised over a computation context
+\texttt{m}, which allows an effect handler instance to be associated with each
+entry in the context. This is important both because it means \texttt{EffM}
+programs can be independent of context, thus interpretable in several
+contexts, and because effects and hence their handlers may change during 
+execution.
 
-execEff : Env m xs -> (p : EffElem e res xs) -> 
-          (eff : e res b a) ->
-          (Env m (updateResTy xs p eff) -> a -> m t) -> 
-          m t
-execEff (val :: env) Here eff' k 
-    = handle val eff' (\res, v => k (res :: env) v)
-execEff (val :: env) (There p) eff k 
-    = execEff env p eff (\env', v => k (val :: env') v)
-
-\end{SaveVerbatim}
-\useverb{invokehandler}
+Since we need to return two values, a result and an updated resource collection,
+we implement the evaluator in continuation passing style, with the two values
+passed to the continuation. This also helps when invoking handlers, which also
+require a continuation. The interpreter has the following type:
 
 \begin{SaveVerbatim}{cpsinterp}
 
-eff : Env m xs -> EffM m xs xs' a -> 
-      (Env m xs' -> a -> m b) -> m b
+effInt : Env m es -> EffM m es es' a -> 
+         (Env m es' -> a -> m b) -> m b
 
 \end{SaveVerbatim}
 \useverb{cpsinterp}
 
+\noindent
+This takes an input set of resources, and a program, and the continuation to run
+on the result and updated environment. Effectful programs are invoked using
+a function of the following form, which invoke \texttt{effInt}
+with a continuation which simply discards the environment when evaluation is
+complete.
+
 \begin{SaveVerbatim}{runeff}
 
 run : Applicative m => 
-      Env m xs -> EffM m xs xs' a -> m a
-run env prog = eff env prog (\env, r => pure r)
+      Env m es -> EffM m es es' a -> m a
+run env prog = effInt env prog (\env, r => pure r)
 
-runPure : Env id xs -> EffM id xs xs' a -> a
-runPure env prog = eff env prog (\env, r => r)
+runPure : Env id es -> EffM id es es' a -> a
+runPure env prog = effInt env prog (\env, r => r)
 
 \end{SaveVerbatim}
 \useverb{runeff}
+
+\noindent
+The full implementation of \texttt{effInt} is given for reference in
+Figure \ref{effdslimp}. The interpreter uses a number of helpers in order
+to manage effects. Firstly, to invoke a handler given a proof that an effect
+is available, we use \texttt{execEff}, defined as follows:
+
+\noindent
+\begin{SaveVerbatim}{invokehandler}
+
+ execEff : Env m es -> (p : EffElem e res es) -> 
+           (eff : e res b a) ->
+           (Env m (updateResTy es p eff) -> a -> m t) -> 
+           m t
+ execEff (val :: env) Here eff' k 
+     = handle val eff' (\res, v => k (res :: env) v)
+ execEff (val :: env) (There p) eff k 
+     = execEff env p eff (\env', v => k (val :: env') v)
+
+\end{SaveVerbatim}
+\useverb{invokehandler}
+
+\noindent
+The proof is used to locate the effect in the environment, which also locates
+the handler, since \texttt{Handler eff m} is a constraint on each entry in
+the environment. Following the structure of the interpreter and the handlers,
+\texttt{execEff} is written in continuation passing style. We can use this
+directly to execute effects:
+
+\begin{SaveVerbatim}{effeff}
+
+effInt env (mkEffectP prf effP) k 
+                   = execEff env prf effP k
+
+\end{SaveVerbatim}
+\useverb{effeff}
+
+\noindent
+Invoking a sub-program with a smaller collection of effects involves dropping
+the unnecessary resources from the environment, invoking the sub-program, then
+rebuilding the environment reinstating the resources which were not used in the
+sub-program. We drop resources from an environment according to the 
+\texttt{SubList} proof with \texttt{dropEnv} as follows:
+
+\begin{SaveVerbatim}{dropenv}
+
+dropEnv : Env m fs -> SubList es fs -> Env m es
+dropEnv [] SubNil = []
+dropEnv (v :: vs) (Keep rest) = v :: dropEnv vs rest
+dropEnv (v :: vs) (Drop rest) = dropEnv vs rest
+
+\end{SaveVerbatim}
+\useverb{dropenv}
+
+\noindent
+Correspondingly, \texttt{rebuildEnv} rebuilds the outer environment, updating
+the resources which were updated by the sub-programs:
+
+\begin{SaveVerbatim}{rebuildenv}
+
+rebuildEnv : Env m ys' -> (prf : SubList ys xs) -> 
+             Env m xs -> Env m (updateWith ys' xs prf) 
+rebuildEnv []        SubNil      env = env
+rebuildEnv (x :: xs) (Keep rest) (y :: env) 
+      = x :: rebuildEnv xs rest env
+rebuildEnv xs        (Drop rest) (y :: env) 
+      = y :: rebuildEnv xs rest env
+
+\end{SaveVerbatim}
+\useverb{rebuildenv}
+
+\noindent
+We can use \texttt{dropEnv} and \texttt{rebuildEnv} to interpret the execution
+of sub-programs, dropping resources before invoking, then rebuilding the
+environment before invoking the continuation:
+
+\begin{SaveVerbatim}{efflift}
+
+effInt env (liftP prf effP) k 
+  = let env' = dropEnv env prf in 
+        effInt env' effP (\envk, p' => 
+              k (rebuildEnv envk prf env) p')
+
+\end{SaveVerbatim}
+\useverb{efflift}
+
+\noindent
+To introduce a new effect using \texttt{new}, we simply extend the environment
+with the new resources before invoking the sub-progam, and drop the extra
+resource before invoking the continuation:
+
+\begin{SaveVerbatim}{effnew}
+
+effInt env (new r prog) k 
+     = let env' = r :: env in effInt env' prog 
+               (\ (v :: envk), p' => k envk p')
+
+\end{SaveVerbatim}
+\useverb{effnew}
+
+\noindent
+Interpreting a \texttt{catch} involves using the \texttt{catch} method of
+the \texttt{Catchable} class. We rely on type directed overloading here to
+disambiguate the \texttt{catch} in the \texttt{EffM} structure from the
+\texttt{catch} provided by the \texttt{Catchable} class:
+
+\begin{SaveVerbatim}{effcatch}
+
+effInt env (catch prog handler) k 
+     = catch (effInt env prog k)
+             (\e => effInt env (handler e) k)
+
+\end{SaveVerbatim}
+\useverb{effcatch}
+
+\noindent
+Finally, to interpret a labelled effect, we remove the label, interpret the
+resulting effect as normal, then replace the label (\texttt{unlabel} and
+\texttt{label} have the obvious definitions, with \texttt{unlabel} removing
+a label from a singleton environment, and \texttt{relabel} replacing it):
+
+\begin{SaveVerbatim}{efflbl}
+
+effInt env (l :- prog) k 
+   = let env' = unlabel env in
+         effInt env' prog (\envk, p' => 
+                              k (relabel l envk) p')
+
+\end{SaveVerbatim}
+\useverb{efflbl}
 
