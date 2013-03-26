@@ -1,6 +1,38 @@
 \section{Example: An Imperative Language Interpreter}
 
+\newcommand{\Imp}{\texttt{Imp}}
+
 \label{sect:impint}
+
+As a larger example, in this section I present an interpreter for 
+a small imperative language, \Imp{}. This language supports variables
+with assignment (so requires an environment), introduction of new
+variables (so requires the environment to be updatable), 
+and printing (so requires console I/O).
+We follow the well-typed interpreter pattern again, using a context membership
+proof to guarantee that local variables are well-scoped. 
+
+We separate expressions (\texttt{Expr}) from statements in the imperative
+language (\texttt{Imp}). First, we define the types. We will support integers,
+booleans, and the unit type:
+
+\begin{SaveVerbatim}{imptypes}
+
+data Ty = TyInt | TyBool | TyUnit 
+
+interpTy : Ty -> Type
+interpTy TyInt  = Int
+interpTy TyBool = Bool
+interpTy TyUnit = ()
+
+\end{SaveVerbatim}
+\useverb{imptypes}
+
+\noindent
+Expressions include values, variables, and binary operators derived from 
+\Idris{} functions, and are defined as follows, indexed by a context
+\texttt{G} (of type \texttt{Vect Ty n}, a vector of \texttt{n} types),
+and the type of the expression:
 
 \begin{SaveVerbatim}{impexpr}
 
@@ -13,25 +45,56 @@ data Expr : Vect Ty n -> Ty -> Type where
 \end{SaveVerbatim}
 \useverb{impexpr}
 
+\noindent
+For brevity, we omit the definition of \texttt{HasType}. It is sufficient to
+know that \texttt{HasType i G t} states that variable \texttt{i} (a de Bruijn
+index) in context \texttt{G} has type \texttt{t}.
+Values of variables are stored in a heterogeneous list
+corresponding to a vector of their types, with a \texttt{lookup} function
+to retrieve these values:
+
 \begin{SaveVerbatim}{impenv}
 
-data Env : Vect Ty n -> Type where
-     Nil  : Env Nil
-     (::) : interpTy a -> Env G -> Env (a :: G)
+data Vars : Vect Ty n -> Type where
+     Nil  : Vars Nil
+     (::) : interpTy a -> Vars G -> Vars (a :: G)
+
+lookup : HasType i G t -> Vars G -> interpTy t
 
 \end{SaveVerbatim}
 \useverb{impenv}
 
+\noindent
+We can write an evaluator for this simple expression language as an 
+effectful programming, assuming we have an environment corresponding to
+the context \texttt{G}:
+
 \begin{SaveVerbatim}{evalimp}
 
-eval : Expr G t -> Eff m [STATE (Env G)] (interpTy t)
+eval : Expr G t -> Eff m [STATE (Vars G)] (interpTy t)
 eval (Val x) = return x
-eval (Var i) = do env <- get
-                  return (lookup i env) 
+eval (Var i) = do vars <- get
+                  return (lookup i vars) 
 eval (Op op x y) = [| op (eval x) (eval y) |]
 
 \end{SaveVerbatim}
 \useverb{evalimp}
+
+\noindent
+Note that, using dependent types, we have expressed a correspondence between
+the context \texttt{G} under which the expression is defined, and under which
+the variables are defined.
+
+% omit for brevity:
+%     For    : Imp G i -> -- initialise
+%              Imp G TyBool -> -- test
+%              Imp G x -> -- increment
+%              Imp G t -> -- body
+%              Imp G TyUnit
+
+The imperative fragment is also indexed over a context \texttt{G} and the
+type of a program. We use the unit type for statements (specifically
+\texttt{Print}) which do not have a value:
 
 \begin{SaveVerbatim}{impprog}
 
@@ -40,101 +103,137 @@ data Imp    : Vect Ty n -> Ty -> Type where
      (:=)   : HasType i G t -> Expr G t -> Imp G t
      Print  : Expr G TyInt -> Imp G TyUnit
 
-     For    : Imp G i -> -- initialise
-              Imp G TyBool -> -- test
-              Imp G x -> -- increment
-              Imp G t -> -- body
-              Imp G TyUnit
-
      (>>=)  : Imp G a -> 
               (interpTy a -> Imp G b) -> Imp G b 
-     Return : Expr G t -> Imp G t
+     return : Expr G t -> Imp G t
 
 \end{SaveVerbatim}
 \useverb{impprog}
 
+\noindent
+Interpreting the imperative fragment requires the local variables to be
+stored as part of the state, as well as console I/O, for interpreting
+\texttt{Print}. We express this with the following type:
+
 \begin{SaveVerbatim}{interpimp}
 
 interp : Imp G t -> 
-         Eff IO [STDIO, STATE (Env G)] (interpTy t)
+         Eff IO [STDIO, STATE (Vars G)] (interpTy t)
 
 \end{SaveVerbatim}
 \useverb{interpimp}
 
-For interpreting \texttt{Let}, we update the environment (but it had better
-be the right update or the recursive call to interpret the scope won't work!).
+In order to interpret \texttt{Let}, which introduces a new variable with
+a given expression as its initial value, we must update the environment.
+Before evaluating the scope of the \texttt{Let} binding, the environment
+must be extended with an additional value, otherwise the recursive call
+will be ill-typed --- the state effect must be carrying an environment
+of the correct length and types. Therefore, we evaluate the expression
+with \texttt{eval}, extend the environment with the result, evaluate the
+scope, then drop the value from the environment.
 
 \begin{SaveVerbatim}{interplet}
 
 interp (Let e sc) 
      = do e' <- eval e
-          env <- get
-          putM (e' :: env)
+          vars <- get
+          putM (e' :: vars)
           res <- interp sc
-          (_ :: env') <- get
-          putM env'
+          (_ :: vars') <- get
+          putM vars'
           return res
 \end{SaveVerbatim}
 \useverb{interplet}
 
-Wherever we call \texttt{eval}, even though it doesn't use the full set of
-effects, we can just call it directly.
+\noindent
+Calling \texttt{eval} is fine here, because it uses a smaller set of effects
+than \texttt{interp}. Also, not that if we forget to drop the value before
+returning, this definition will be ill-typed because the type of
+\texttt{interp} requires that the environment is unchanged on exit.
+
+Interpreting an assignment simply involves evaluating the expression to be
+stored in the variable, then updating the state, where \texttt{updateVar v vars
+val'}
+updates the variable at position \texttt{v} in the environment \texttt{vars} with
+the new value \texttt{val'}:
 
 \begin{SaveVerbatim}{interpassign}
 
 interp (v := val) 
      = do val' <- eval val
-          update (\env => update v env val')
+          update (\vars => updateVar v vars val')
           return val'
 
 \end{SaveVerbatim}
 \useverb{interpassign}
 
-\begin{SaveVerbatim}{forloop}
+\noindent
+For \texttt{Print}, we simply evaluate the expression and display it, relying
+on the \texttt{STDIO} effect:
 
-interp (For init test inc body)
-     = do interp init; forLoop 
-  where forLoop = do tval <- interp test
-                     if (not tval) 
-                        then return ()
-                        else do interp body
-                                interp inc
-                                forLoop 
+\begin{SaveVerbatim}{interpprint}
 
-\end{SaveVerbatim}
-\useverb{forloop}
-
-
-Remaining operations, Print, return and bind, are straightforward.
-Using DSL notation~\cite{Brady2012} and implicit syntax, we can even make
-the language look like a real imperative language:
-
-\begin{SaveVerbatim}{countprog}
-
-dsl imp
-    let = Let
-    variable = id
-    index_first = stop
-    index_next = pop
-
-implicit MkImp : Expr G t -> Imp G t
-MkImp = Return
-
-count : Imp [] TyUnit
-count = imp (do let x = 0
-                For (x := 0) (x < 10) (x := x + 1)
-                    (Print (x + 1)))
+interp (Print x) 
+     = do e <- eval x
+          putStrLn (show e)
 
 \end{SaveVerbatim}
-\useverb{countprog}
+\useverb{interpprint}
 
-The main program sets up the initial resources, then 
+% \begin{SaveVerbatim}{forloop}
+% 
+% interp (For init test inc body)
+%      = do interp init; forLoop 
+%   where forLoop = do tval <- interp test
+%                      if (not tval) 
+%                         then return ()
+%                         else do interp body
+%                                 interp inc
+%                                 forLoop 
+% 
+% \end{SaveVerbatim}
+% \useverb{forloop}
+% 
+% 
+% Remaining operations, Print, return and bind, are straightforward.
+% Using DSL notation~\cite{Brady2012} and implicit syntax, we can even make
+% the language look like a real imperative language:
+% 
+% \begin{SaveVerbatim}{countprog}
+% 
+% dsl imp
+%     let = Let
+%     variable = id
+%     index_first = stop
+%     index_next = pop
+% 
+% implicit MkImp : Expr G t -> Imp G t
+% MkImp = Return
+% 
+% count : Imp [] TyUnit
+% count = imp (do let x = 0
+%                 For (x := 0) (x < 10) (x := x + 1)
+%                     (Print (x + 1)))
+% 
+% \end{SaveVerbatim}
+% \useverb{countprog}
+
+\noindent
+Given some program, \texttt{prog : Imp [] TyUnit}, a main program would need
+to set up the initial resources, then call the interpreter directly:
 
 \begin{SaveVerbatim}{mainprog}
 
 main : IO ()
-main = run [(), []] (interp count)
+main = run [(), []] (interp prog)
 
 \end{SaveVerbatim}
 \useverb{mainprog}
+
+\noindent
+Though small, this example illustrates the design of a complete application
+built using \Eff{}: a main program which sets up the required set of resources
+and invokes the top level effectful program. This, in turn, invokes effectful
+programs as necessary, which may use at most the resources available at the
+point where they are invoked.
 

@@ -267,7 +267,6 @@ updateWith []        []        SubNil      = []
 \end{SaveVerbatim}
 \useverb{updwith}
 
-\noindent
 Again, we can construct the necessary proofs of \texttt{SubList} automatically,
 if the sub-program uses a valid set of effects, because all effects are
 statically known, using a reflected tactic \texttt{findSubList}. We implement
@@ -279,9 +278,9 @@ implicit
 lift : {default tactics { 
                    reflect findSubList;  
                 }
-          prf : SubList ys xs} ->
-       (prog : EffM m ys ys' t) -> 
-       EffM m xs (updateWith ys' xs prf) t
+          prf : SubList fs es} ->
+       (prog : EffM m fs fs' t) -> 
+       EffM m es (updateWith fs' fs prf) t
 lift {prf} e = lift prf e
 
 \end{SaveVerbatim}
@@ -401,7 +400,7 @@ effInt env (l :- prog) k = let env' = unlabel env in
 Running an effectful program, of type \texttt{EffM m es es' t}, should yield
 a computation of type \texttt{m t}, that is, the program returns a value of type
 \texttt{t} in some computation context \texttt{m}. We can interpret programs
-mostly through a simple traversal of the \texttt{EffM} syntax, subjet to the
+mostly through a simple traversal of the \texttt{EffM} syntax, subject to the
 following considerations:
 
 \begin{itemize}
@@ -452,7 +451,7 @@ effInt : Env m es -> EffM m es es' a ->
 \noindent
 This takes an input set of resources, and a program, and the continuation to run
 on the result and updated environment. Effectful programs are invoked using
-a function of the following form, which invoke \texttt{effInt}
+a function of the following form, calling \texttt{effInt}
 with a continuation which simply discards the environment when evaluation is
 complete.
 
@@ -527,13 +526,13 @@ the resources which were updated by the sub-programs:
 
 \begin{SaveVerbatim}{rebuildenv}
 
-rebuildEnv : Env m ys' -> (prf : SubList ys xs) -> 
-             Env m xs -> Env m (updateWith ys' xs prf) 
+rebuildEnv : Env m fs' -> (prf : SubList fs es) -> 
+             Env m es -> Env m (updateWith fs' es prf) 
 rebuildEnv []        SubNil      env = env
-rebuildEnv (x :: xs) (Keep rest) (y :: env) 
-      = x :: rebuildEnv xs rest env
-rebuildEnv xs        (Drop rest) (y :: env) 
-      = y :: rebuildEnv xs rest env
+rebuildEnv (f :: fs) (Keep rest) (e :: env) 
+      = f :: rebuildEnv fs rest env
+rebuildEnv fs        (Drop rest) (e :: env) 
+      = e :: rebuildEnv es rest env
 
 \end{SaveVerbatim}
 \useverb{rebuildenv}
@@ -561,7 +560,8 @@ resource before invoking the continuation:
 \begin{SaveVerbatim}{effnew}
 
 effInt env (new r prog) k 
-     = let env' = r :: env in effInt env' prog 
+     = let env' = r :: env in 
+           effInt env' prog 
                (\ (v :: envk), p' => k envk p')
 
 \end{SaveVerbatim}

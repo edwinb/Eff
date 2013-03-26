@@ -100,6 +100,10 @@ but separates input effects (\texttt{es}) from output effects (\texttt{es'}).
 In fact, \texttt{Eff} is defined in terms of \texttt{EffM}, with equal
 input/output effects.
 
+We adopt the convention that the names \texttt{es} and \texttt{fs} refer to a list
+in input effects, and the names \texttt{es'} and \texttt{fs'} refer to a list
+of output effects.
+
 \subsubsection{First example: State}
 
 In general, an effectful program implemented in the \texttt{EffM} structure has
@@ -272,8 +276,8 @@ at each leaf, we use \texttt{update}, which combines a \texttt{get} and a
 
 \begin{SaveVerbatim}{treelblcountty}
 
-tagCount : Tree a -> Eff m [Label ::: STATE Int, 
-                            Tag   ::: STATE Int] 
+tagCount : Tree a -> Eff m [Tag   ::: STATE Int, 
+                            Count ::: STATE Int] 
                               (Tree (Int, a))
 \end{SaveVerbatim}
 \begin{SaveVerbatim}{treelblcountdef}
@@ -363,8 +367,10 @@ rndInt : Int -> Int -> Eff m [RND] Int
 \useverb{efftypes}
 
 \noindent
-The evaluator itself is written in the \texttt{Eff} type, using
-\texttt{do}-notation as in the monad transformer implementation. The 
+The evaluator itself is written in the \texttt{Eff} type.
+%, using
+%\texttt{do}-notation as in the monad transformer implementation. 
+The 
 type, again, lists the resources we require:
 
 \begin{SaveVerbatim}{langeffty}
@@ -397,7 +403,7 @@ eval (Random upper) = rndInt 0 upper
 \noindent
 \textbf{Remark:}
 We have used idiom brackets~\cite{McBride2007} in this implementation, to
-give a more concision notation for applicative programming with effects.
+give a more concise notation for applicative programming with effects.
 An application inside idiom brackets, \texttt{[| f a b c d |]} translates
 directly to:
 
