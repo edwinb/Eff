@@ -73,9 +73,8 @@ University of St Andrews, St Andrews, Scotland.}
 \begin{abstract}
 One often cited benefit of pure functional programming is that pure code is
 easier to test and reason about, both formally and informally. However, in
-order to be useful, programs must interact with the outside world in some way
---- real programs have state, open files, send data over a network, draw
-pictures, and so on. Haskell solves this problem using \remph{monads} to capture
+order to be useful, programs must interact with the outside world.
+Haskell solves this problem using \remph{monads} to capture
 details of possibly side effecting computations --- it provides monads for
 capturing State, I/O, exceptions, non-determinism, libraries for practical
 purposes such as CGI and parsing, and many others, as well as \remph{monad

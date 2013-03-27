@@ -9,10 +9,8 @@ data EffM : (m : Type -> Type) -> List EFFECT -> List EFFECT -> Type -> Type whe
      mkEffectP : (prf : EffElem e a es) -> (eff : e a b t) -> EffM m es (updateResTy es prf eff) t
      liftP     : (prf : SubList fs es) -> EffM m fs fs' t -> EffM m es (updateWith fs' es prf) t
      (:-)      : (l : ty) -> EffM m [x] [y] t -> EffM m [l ::: x] [l ::: y] t
-     new       : Handler e m => 
-                 res -> EffM m (MkEff res e :: es) (MkEff res' e :: es') a -> EffM m es es' a
-     catch     : Catchable m err => 
-                 EffM m es es' a -> (err -> EffM m es es' a) -> EffM m es es' a
+     new       : Handler e m => res -> EffM m (MkEff res e :: es) (MkEff res' e :: es') a -> EffM m es es' a
+     catch     : Catchable m err => EffM m es es' a -> (err -> EffM m es es' a) -> EffM m es es' a
 \end{SaveVerbatim}
 
 \begin{figure*}[t]
@@ -146,10 +144,10 @@ data EffElem : (Type -> Type -> Type -> Type) ->
 \useverb{effelem}
 
 \noindent
-This proof serves two purposes. Firstly, it provides a guarantee that the effect
-is available with the correct resource type. Secondly, as we shall see shortly,
-it serves as an index into the resource set when we \remph{evaluate} programs
-and when compute the list of output resources.
+This proof serves two purposes --- it provides a guarantee that the effect
+is available with the correct resource type, and, as we shall see shortly,
+it serves as an index into the resource set when we \remph{evaluate} programs.
+%and compute the list of output resources.
 %
 After the effect has been handled, its resource type may have been updated.
 We must therefore update the output resource state in the type. Again, we use
@@ -173,9 +171,9 @@ The problem with \texttt{mkEffectP} is that we must provide an
 explicit proof that the effect is available. Since the effect list is statically
 known, \Idris{} ought to be able to find such a proof automatically.
 
-\Idris{} currently has very limited proof search capabilities, based on
-reflection and reification of \Idris{} programs, but they
-are sufficient for constructing the required proofs. The reflection mechanism
+\Idris{} currently has limited proof search, based on
+reflection and reification of programs, but it
+is sufficient for constructing the required proofs. The reflection mechanism
 itself is beyond the scope of this paper. Briefly, we have
 the following function, which constructs a tactic for searching for proofs 
 of \texttt{EffElem}:
@@ -215,7 +213,7 @@ being to make simple proofs automatable.
 \subsubsection{Effectful sub-programs}
 
 As well as invoking algebraic effects directly, we would like to be able to
-invoke effectful sub-programs, which may use all of the effects available, or
+invoke sub-programs, which may use all of the effects available, or
 a subset. To achieve this, we use the \texttt{liftP} construct:
 
 \begin{SaveVerbatim}{efflift}
@@ -291,11 +289,13 @@ The \texttt{implicit} modifier before \texttt{lift} states that this function
 can be used as an \remph{implicit conversion}. Implicit conversions are inspired
 by a similar feature in Scala~\cite{Scala} --- the effect of the \texttt{implicit}
 modifier is, intuitively, that \texttt{lift} will be applied to
-a program in \texttt{EffM} if it is required for type correctness. It is
-simple to check if an implicit conversion is required during type 
-checking --- since type checking is type directed it always has access to the
+a program in \texttt{EffM} if it is required for type correctness. 
+%It is
+%simple to check if an implicit conversion is required during type 
+%checking --- 
+Since type checking is type directed it always has access to the
 required type of an expression, and the implicit coercions which produce
-that type.
+that type, so applying conversions is simple.
 
 Such conversions are, deliberately, limited. They cannot be chained, unlike
 implicit coercions in Coq, to avoid coherence problems. Furthermore, to avoid
@@ -303,10 +303,10 @@ ambiguity problems, if there is more than one implicit conversion available
 then \remph{neither} will be applied. In the \Eff{} library, only \texttt{lift}
 is implicit.
 
-\textbf{Remark:} Using the \texttt{SubList} definition, rather than some notion
+\textbf{Remark:} Using \texttt{SubList} as it is, rather than some notion
 of subset, means that in sub-programs the effects must appear in the same order
 as they appear in the caller's effect list. This is not an inherent limitation,
-however --- with improved proof search, we should also be able to support
+--- with improved proof search, we should also be able to support
 effect sets which are \remph{permutations} of another.
 
 \subsubsection{Labelling effects}

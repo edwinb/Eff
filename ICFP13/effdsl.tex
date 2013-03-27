@@ -40,12 +40,12 @@ useful for documenting the purpose of an argument.
 describes the context in which the effectful program will be run, a list
 of side effects \texttt{es} that the program is permitted to use, 
 and the program's return type \texttt{a}. The name \texttt{m} for the computation
-context is suggestive of a monad --- the computation context most commonly 
-is a monad but there is no requirement for it to be so.
+context is suggestive of a monad,
+%--- the computation context most commonly is a monad 
+but there is no requirement for it to be so.
 
 Side effects are described using the \texttt{EFFECT} type --- we will refer
-to these as \remph{concrete} effects.  The following are 
-among the predefined concrete effects:
+to these as \remph{concrete} effects. For example:
 
 \begin{SaveVerbatim}{effs}
 
@@ -101,7 +101,7 @@ In fact, \texttt{Eff} is defined in terms of \texttt{EffM}, with equal
 input/output effects.
 
 We adopt the convention that the names \texttt{es} and \texttt{fs} refer to a list
-in input effects, and the names \texttt{es'} and \texttt{fs'} refer to a list
+in input effects, and \texttt{es'} and \texttt{fs'} refer to a list
 of output effects.
 
 \subsubsection{First example: State}
@@ -109,8 +109,8 @@ of output effects.
 In general, an effectful program implemented in the \texttt{EffM} structure has
 the look and feel of a monadic program in Haskell, since \texttt{EffM} supports
 \texttt{do}-notation. To illustrate basic usage, let us implement
-a program with state --- a function which tags each node in a binary tree with
-a unique integer, counting depth first, left to right. We declare trees as
+a stateful function, which tags each node in a binary tree with
+a unique integer, depth first, left to right. We declare trees as
 follows:
 
 \begin{SaveVerbatim}{treedef}
@@ -136,15 +136,14 @@ tag : Tree a -> Eff m [STATE Int] (Tree (Int, a))
 
 \noindent
 The implementation traverses the tree, using \texttt{get} and \texttt{put}
-operations to read and write state:
+to manipulate state:
 
 \begin{SaveVerbatim}{treelbl}
 
 tag Leaf = return Leaf
 tag (Node l x r) 
      = do l' <- tag l
-          lbl <- get
-          put (lbl + 1)
+          lbl <- get; put (lbl + 1)
           r' <- tag r
           return (Node l' (lbl, x) r')
 
@@ -199,34 +198,35 @@ runPure : Env id es -> EffM id es es' a -> a
 \noindent
 Corresponding functions \texttt{runEnv}, \texttt{runWithEnv} and
 \texttt{runPureEnv} are also available for cases when the final resources are
-required.  The only reason \texttt{run} needs \texttt{m} to be an applicative
+required.  The reason \texttt{run} needs \texttt{m} to be an applicative
 functor
 is that it uses \texttt{pure} to inject a pure value into \texttt{m}. If this
-is inconvenient, \texttt{runWith} can be used instead. Note that, unlike the
-monad transformer approach, there is no assumption or requirement that
+is inconvenient, \texttt{runWith} can be used instead. Unlike the
+monad transformer approach, there is no requirement that
 \texttt{m} is a monad. Any type transformer is fine --- in particular,
-if the effectful program can be translated into a pure function, \texttt{id}
-is perfectly fine.
-
-As we will see shortly, the particular choice of \texttt{m} can be
-important. Consider, for example, the difference between running a program with
-exceptions in the context of \texttt{IO}, \texttt{Maybe} or \texttt{Either}.
+\texttt{id} can be used if
+the effectful program can be translated into a pure function.
+%
+As we will see, the particular choice of \texttt{m} can be
+important. Programs with exceptions, for example, can be run
+in the context of \texttt{IO}, \texttt{Maybe} or \texttt{Either}.
 %
 We will return to the definition of \texttt{Env} in Section \ref{sect:envdef}.
-For the moment, it suffices to know that it is a heterogenous list of values
+% For the moment, 
+For now, it suffices to know that it is a heterogenous list of values
 for the initial resources \texttt{es}.
 
 \subsubsection{Labelled Effects}
 
-When we invoke effectful functions such as \texttt{get} and \texttt{put},
-the \Eff{} language internally searches through the list of available effects
-to check that it is supported, and invokes the effect using the corresponding
+When we invoke an effect, %such as \texttt{get} or \texttt{put},
+\Eff{} internally searches the list of available effects to check
+it is supported, and invokes the effect using the corresponding
 resource. This leads to an important question: what if we have more than one 
 effect which supports the function? A particular situation where this arises
 is when we have more than one integer state.
 %
-For example, imagine we would like to count the number of \texttt{Leaf} nodes
-in a tree while tagging nodes.  In this case, we will need two integer states:
+For example, to count the number of \texttt{Leaf} nodes
+in a tree while tagging nodes, we will need two integer states:
 
 \begin{SaveVerbatim}{treelblcount}
 
@@ -238,8 +238,9 @@ tagCount : Tree a ->
 
 \noindent
 What should be the effect of \texttt{get} and \texttt{put} in this program?
-Do they read and update the first state, the second, or choose
-non-deterministically? 
+Which effect do they act on?
+%Do they read and update the first state, the second, or choose
+%non-deterministically? 
 %
 In practice, the earlier effect is chosen. While clearly defined, this is
 unlikely to be the desired behaviour, so 
@@ -300,7 +301,7 @@ tagCount (Node l x r)
 \noindent
 In order to get the count, we will need access to the environment \remph{after}
 running \texttt{tagCount}. To do so, we use \texttt{runPureEnv}, which returns
-the final resource states as well as the result of the computation:
+the final resource states as well as the result:
 
 \begin{SaveVerbatim}{runenvty}
 
@@ -340,10 +341,9 @@ tagCountFrom x t
 
 \subsubsection{An Effectful Evaluator revisited}
 
-Recall the effectful evaluator in the introduction. To implement this
-in the \Eff{} language, we must support exceptions, a state containing the
-current environment, and random number generation. Environments are
-represented as a list of mappings from \texttt{String} to \texttt{Int}:
+To implement the effectful evaluator from the introduction 
+in \Eff{}, we support exceptions, random numbers and an environment
+mapping from \texttt{String} to \texttt{Int}:
 
 \begin{SaveVerbatim}{langenv}
 
@@ -367,11 +367,12 @@ rndInt : Int -> Int -> Eff m [RND] Int
 \useverb{efftypes}
 
 \noindent
-The evaluator itself is written in the \texttt{Eff} type.
+The evaluator itself is written as an instance of \texttt{Eff}:
+%type.
 %, using
 %\texttt{do}-notation as in the monad transformer implementation. 
-The 
-type, again, lists the resources we require:
+%The 
+%type, again, lists the resources we require:
 
 \begin{SaveVerbatim}{langeffty}
 
@@ -382,23 +383,27 @@ eval : Expr ->
 \useverb{langeffty}
 
 \noindent
-The implementation simply invokes the required effects \texttt{get},
-\texttt{raise} and \texttt{rndInt}, with the \Eff{} system checking that
-these effects are available:
+The implementation simply invokes the required effects 
+%\texttt{get}, \texttt{raise} and \texttt{rndInt}, 
+with \Eff{} checking that these effects are available:
 
 \begin{SaveVerbatim}{langeff}
 
 eval (Val x) = return x
-eval (Var x) = 
-    do vs <- get
-       case lookup x vs of
-            Nothing => raise ("Error " ++ x)
-            Just val => return val
+eval (Var x) = do vs <- get
+                  case lookup x vs of
+                    Nothing => raise ("Error " ++ x)
+                    Just val => return val
 eval (Add l r) = [| eval l + eval r |]
 eval (Random upper) = rndInt 0 upper
 
 \end{SaveVerbatim}
 \useverb{langeff}
+
+%\begin{figure}[h]
+%\label{langeffint}
+%\caption{An Effectful Interpreter}
+%\end{figure}
 
 \noindent
 \textbf{Remark:}
@@ -636,7 +641,6 @@ update:
 
 update : (x -> x) -> Eff m [STATE x] ()
 update f = do val <- get; put (f val) 
-
 \end{SaveVerbatim}
 \useverb{update}
 
@@ -805,8 +809,8 @@ instance Handler (Exception e) (Either e) where
 \noindent
 Given that we can raise exceptions in an \Eff{} program, it is also useful to be
 able to catch them. The \texttt{catch} operation runs a possibly failing
-computation \texttt{comp} in some context \texttt{m}, running \texttt{handler}
-if the computation fails:
+computation \texttt{comp} in some context \texttt{m}:
+%, running \texttt{handler} if the computation fails:
 
 \begin{SaveVerbatim}{catch}
 

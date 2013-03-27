@@ -107,7 +107,7 @@ dropReader :: RandT Maybe a ->
 These problems mean that, in general, there is little motivation for separating
 effects, and a temptation to build an application around one general purpose
 monad capturing all of an application's state and exception handling needs.
-
+%
 It would be desirable, on the other hand, to separate effects into specific
 components such as console I/O, file and network handling and operating system
 interaction, for the same reason that it is desirable to separate the pure
@@ -145,10 +145,11 @@ variety of underlying contexts using \emph{effect handlers}.
 File and Console I/O, random number generation and
 non-determinism) and their handlers. I show how alternative handlers
 can be used to evaluate effects in different contexts. In particular, we can
-implement unit tests for (and possibly reason about) interactive programs by
-handling the effect in the context of input and output streams.
-\item I give example programs which combine effects, including a larger
-example, an interpreter for an imperative language with mutable variables, to
+use an alternative handler to run interactive programs in a pure context.
+%implement unit tests for (and possibly reason about) interactive programs by
+%handling the effect in the context of input and output streams.
+\item I give example programs which combine effects, including a 
+an interpreter for an imperative language with mutable variables, to
 illustrate how effectful applications may be structured.
 \end{itemize}
 

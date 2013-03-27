@@ -20,12 +20,12 @@ These languages are built on well-studied theoretical
 foundations~\cite{Hyland2006,Levy2001,Plotkin2009,Pretnar2010}, 
 which we have also applied in this paper.
 %
-In our approach, we have seen that the \Idris{} type system is able to express
+In our approach, we have seen that the \Idris{} type system can express
 effects by embedding, without any need to extend the language or type system. 
 We make no attempt to \remph{infer} effect types, however, since our intention
-is to specify effects in advance, and check that they are used correctly.
+is to \remph{specify} effects and \remph{check} that they are used correctly.
 Nevertheless, since \texttt{EffM} is represented as an algebraic data type,
-a certain amount of effect inference would be possible.
+some effect inference would be possible.
 
 %Also~\cite{Kammar2012}.
 
@@ -41,7 +41,7 @@ reordering of transformers, or reducing the transformer stack.
 The \Eff{} approach encourages a more fine-grained separation of effects,
 by making it easy to call functions which use a smaller set of effects.
 
-The approach we have taken, with resources associated with each effect,
+Our approach, associating resources with each effect,
 leads to a natural way of expressing and verifying resource usage protocols,
 by updating the resource type. This is a problem previously tackled by
 others, using special purpose type systems~\cite{Walker2000} 
@@ -59,8 +59,7 @@ types, such as supported by Xanadu~\cite{Xi2000} and Ynot~\cite{Ynot2008}.
 Ynot in particular is an axiomatic extension to Coq which allows reasoning
 about imperative programs using Hoare Type Theory~\cite{HoareTT2008} ---
 preconditions and postconditions on operations can be expressed in \Eff{} by
-giving appropriate
-input and output resource types.
+giving appropriate input and output resource types.
 %
 The difficulty in imperative programming with dependent types is that
 updating one value may affect the type of another, though in our interpreter
@@ -75,8 +74,8 @@ in a mutable state.
 
 \label{sect:conclusion}
 
-\Idris{} is a new language, with a full dependent type system. A new language
-with a new type system gives us an ideal opportunity to revisit old problems
+\Idris{} is a new language, with a full dependent type system. 
+This gives us an ideal opportunity to revisit old problems
 about how to handle effects in a pure functional language --- while the old
 approach, based on monads and transformers, has proved successful in
 Haskell, in this paper we have investigated an alternative approach 
@@ -85,59 +84,75 @@ By linking each effect with a \remph{resource} we can even track the state
 of resources through program execution, and reason about resource usage
 protocols such as file management. 
 
-What dependent type features did we need? Obvious question: what would
-it take to do this in Haskell? We used dependent types in a fairly limited
-way, but it felt quite naturaly. Is it worth bending Haskell to o this
-unnaturally, or should we just wait until it supports DTP more? Or forget it?
+The \Eff{} approach has a number of strengths, and some weaknesses which
+we hope to address in future work. The main strength is that many
+common effects such as state, I/O and exceptions can be combined without
+the need for monad transformers. Effects can be implemented independently,
+and combined without furhter effort. Lifting is automatic --- sub-programs
+using a smaller set of effects can be called without any explicit lifting
+operation, so as well as being easy to combine effects, programs
+remain readable. We have described a number of effects which are representable
+in this setting, and there are several others we have not described which
+are easy to define, such as parsing, logging, and bounded mutable arrays.
+Arrays, statically bounded with a dependent type, could even lead to optimisations
+since the effect system can guarantee that only one copy is needed, therefore
+the array could have a compact representation with no run-time bounds
+checking.
 
+Another advantage is that it will be possible to have fine-grained separation
+of systems effects --- we can be precise about needing network support, CGI,
+graphics, the operating system's environment, etc, rather than including all of
+these effects in one \texttt{IO} monad.
 
-Strengths: monad transformers not needed. Lift automatic, can permute effects
-without need to change program. Flexibility. Easy to read and write.
-Other effects we should be able to support --- parsing, logging, bounded
-mutable arrays, and in particular
-it will be possible to have fine-grained separation of systems effects, e.g.
-we can be precise about needing network support, CGI, graphics, OS
-environment, etc, rather than throwing it all into one IO monad.
+While using \Eff{}, we are still able to use monads.  Effects work \remph{with}
+monads rather than against them, and indeed effectful programs are generally
+translated to monadic
+programs. As a result, concepts which need to be monadic (for example,
+continuations) can remain so, and still work with \Eff{}.
 
-Some other effects we could implement: parsing, IO references, mutable
-arrays (which could be bounded, and guarantee one copy, so stored compactly).
+\subsection*{Further Work}
 
-We can still use the monadic implementations we know and love --- effects work
-\remph{with} monads rather than against them, and indeed effectful programs
-are (or at least can be) translated to monadic programs in the end. So things
-which need to be monads still can be --- important since not every monad
-can be translated to an effect.
+The \Eff{} system is promising as a general approach to effectful programming,
+but we have only just begun. At present, we are developing more libraries
+using \Eff{} to assess how well it works in practice as a progamming tool,
+as well as how efficient it is for realistic programs.
 
-Weaknesses: doesn't capture all monads (is this a weakness or just an
-observation?). Small interpreter overhead, but could be erased either with
-partial evaluation~\cite{Brady2010} or, possibly better, a finally
-tagless approach~\cite{Carette2009}. Also need to ensure that the elaborator
-can handle large programs --- it has to do a lot of work.
+The most obvious weakness of \Eff{}, which is already known for the algebraic
+approach, is that algebraic effects cannot capture all monads. This does not
+appear to be a serious problem, however, given that \Eff{} is
+designed to interact with monads, rather than to replace them. More seriously,
+but less obviously, there is a small interpreter overhead since \texttt{EffM}
+is represented as an algebraic data type, with an associated interpreter.  We
+have not yet investigated in depth how to deal with this overhead, or indeed if
+it is a serious problem in practice, but we expect that partial
+evaluation~\cite{Brady2010} or a finally tagless approach~\cite{Carette2009}
+would be sufficient. 
 
-Error messages are quite noisy.
+Another weakness which we hope to address is that mixing
+control and resource effects is a challenge. For example, we cannot
+currently thread state through all branches of a non-deterministic search.
+If we can address this, it may be possible to represent more sophisticated
+effects such as co-operative multithreading, or even partiality.
+One possible way to tackle this problem would be to introduce a new method
+of the \texttt{Handler} class, with a default implementation calling the
+usual \texttt{handle}, which manages resources more precisely.
 
-Mixing control and resource effects is still a bit awkward --- can't yet
-thread state through all branches of a non-deterministic search, for example.
-If we could do this, could possibly support co-operative multithreading with
-shared state.
+An implementation detail which could be improved without affect usage of
+the library is that effectful sub-programs require ordering of effects
+to be preserved. This should be a small improvement, merely requiring permuation
+proofs of lists, but ideally generating these proofs will be automatic.
 
-\subsection{Further Work}
+The \Eff{} implementation is entirely within the \Idris{} language --- no
+extensions were needed. It takes advantage of dependent types and theorem
+proving in several small but important ways: heterogenous lists of resources,
+proofs of list membership and sub-list predicates, and parameterisation of
+resources. Since modern Haskell supports many of these features, this leads
+to an obvious question: what would it take to implement \Eff{} as an embedded
+library in Haskell? An interesting topic for further study would be whether
+this approach to combining effects would be feasible in a more mainstream
+functional language.
 
-We have only just begun.
-
-See if it works in practice, then efficiency --- partial evaluation as in
-~\cite{Brady2010} is not quite enough, but using case operators rather
-than pattern matching ought to make it enough.
-
-Another weakness to address --- representation of sublists requires ordering
-to be preserved. It's easy to fix, since permuting a list is easy, but it
-would be nice to be automatic.
-
-Possibly making handle more flexible so that it can allow resources to interact
---- say, supporting shared state in co-operative multithreading.
-
-What about doing this in Haskell? Recent type system extensions, plus type
-classes for automatic proof construction. Do we really need monad transformers
-for combining effects any more?
-
+Monad transformers have served us well, and are a good fit for the Haskell
+type system. However, type systems are moving on. Perhaps now is the time to
+look for something more effective.
 
