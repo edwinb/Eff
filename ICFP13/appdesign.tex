@@ -6,9 +6,9 @@
 
 As a larger example, in this section I present an interpreter for 
 a small imperative language, \Imp{}. This language supports variables
-with assignment (so requires an environment), introduction of new
-variables (so requires the environment to be updatable), 
-and printing (so requires console I/O).
+with assignment and introduction of new
+variables (so requiring an updatable environment), 
+and printing (so requiring console I/O).
 We follow the well-typed interpreter pattern again, using a context membership
 proof to guarantee that local variables are well-scoped. 
 
@@ -31,7 +31,7 @@ interpTy TyUnit = ()
 \noindent
 Expressions include values, variables, and binary operators derived from 
 \Idris{} functions, and are defined as follows, indexed by a context
-\texttt{G} (of type \texttt{Vect Ty n}, a vector of \texttt{n} types),
+\texttt{G} (of type \texttt{Vect Ty n}),
 and the type of the expression:
 
 \begin{SaveVerbatim}{impexpr}
@@ -58,15 +58,18 @@ to retrieve these values:
 data Vars : Vect Ty n -> Type where
      Nil  : Vars Nil
      (::) : interpTy a -> Vars G -> Vars (a :: G)
-
-lookup : HasType i G t -> Vars G -> interpTy t
-
 \end{SaveVerbatim}
 \useverb{impenv}
 
+\begin{SaveVerbatim}{lookup}
+lookup : HasType i G t -> Vars G -> interpTy t
+
+\end{SaveVerbatim}
+\useverb{lookup}
+
 \noindent
 We can write an evaluator for this simple expression language as an 
-effectful programming, assuming we have an environment corresponding to
+effectful program, assuming we have an environment corresponding to
 the context \texttt{G}:
 
 \begin{SaveVerbatim}{evalimp}
@@ -123,6 +126,7 @@ interp : Imp G t ->
 \end{SaveVerbatim}
 \useverb{interpimp}
 
+\noindent
 In order to interpret \texttt{Let}, which introduces a new variable with
 a given expression as its initial value, we must update the environment.
 Before evaluating the scope of the \texttt{Let} binding, the environment
@@ -134,14 +138,13 @@ scope, then drop the value from the environment.
 
 \begin{SaveVerbatim}{interplet}
 
-interp (Let e sc) 
-     = do e' <- eval e
-          vars <- get
-          putM (e' :: vars)
-          res <- interp sc
-          (_ :: vars') <- get
-          putM vars'
-          return res
+interp (Let e sc) = do e' <- eval e
+                    vars <- get
+                    putM (e' :: vars)
+                    res <- interp sc
+                    (_ :: vars') <- get
+                    putM vars'
+                    return res
 \end{SaveVerbatim}
 \useverb{interplet}
 
@@ -220,7 +223,7 @@ interp (Print x)
 
 \noindent
 Given some program, \texttt{prog : Imp [] TyUnit}, a main program would need
-to set up the initial resources, then call the interpreter directly:
+to set up the initial resources, then call the interpreter:
 
 \begin{SaveVerbatim}{mainprog}
 

@@ -26,9 +26,9 @@ data EffM : (m : Type -> Type) -> List EFFECT -> List EFFECT -> Type -> Type whe
 The implementation of \Eff{} follows a common pattern in dependently typed DSL
 implementation, that of the well-typed
 interpreter~\cite{augustsson1999exercise,Brady2006a,Pasalic2002}. We describe
-the DSL as a data type, \texttt{EffM} which expresses the properties programs
-must satisfy in its type, with a corresponding interpreter. The type sfstem of
-\Idris{} guarantees that only programs which satisfy the necessary properties 
+the DSL as a data type, \texttt{EffM}, which expresses the properties a program
+must satisfy in its type, with a corresponding interpreter. The type system
+guarantees that only programs which satisfy these properties 
 can be interpreted.
 
 \subsection{Language representation}
@@ -111,11 +111,13 @@ It is important here, since we cannot make
 
 \subsubsection{Invoking effects}
 
-Recall that algebraic effects are promoted to \Eff{} programs using concrete
-effects with the \texttt{mkEffect} function, the type of which has so far
+Recall that an algebraic effect is promoted to an \Eff{} program 
+with the \texttt{mkEffect} function, the type of which has so far
 been postponed. We can invoke effects using a helper, \texttt{mkEffectP}, which
 requires a \remph{proof}, \texttt{prf},
-that the effect we are invoking is available:
+that the effect 
+%we are invoking 
+is available:
 
 \begin{SaveVerbatim}{effinvoke}
 
@@ -148,19 +150,20 @@ This proof serves two purposes. Firstly, it provides a guarantee that the effect
 is available with the correct resource type. Secondly, as we shall see shortly,
 it serves as an index into the resource set when we \remph{evaluate} programs
 and when compute the list of output resources.
-
-After the effect has been executed, its resource type may have been updated.
-We must therefore update the output resource state. Again, we use the structure
-of the proof, to update the resource type from \texttt{a} to \texttt{b}.
+%
+After the effect has been handled, its resource type may have been updated.
+We must therefore update the output resource state in the type. Again, we use
+the structure of the proof, to update the resource type from \texttt{a} to
+\texttt{b}.
 
 \begin{SaveVerbatim}{updateresty}
 
 updateResTy : (es : List EFFECT) -> 
               EffElem e a es -> e a b t -> List EFFECT
-updateResTy {b} (MkEff a e :: es) Here      n 
-                 = (MkEff b e) :: es
-updateResTy     (x :: es)         (There p) n 
-                 = x :: updateResTy es p n
+updateResTy {b} (MkEff a e :: es) Here n 
+    = (MkEff b e) :: es
+updateResTy (x :: es) (There p) n 
+    = x :: updateResTy es p n
 
 \end{SaveVerbatim}
 \useverb{updateresty}
@@ -194,9 +197,7 @@ effect is not available.
 \label{sect:mkeffect}
 \begin{SaveVerbatim}{impeff}
 
-mkEffect : {default tactics { 
-                       reflect findEffElem; 
-                    } 
+mkEffect : {default tactics { reflect findEffElem; } 
               prf : EffElem e a es} -> 
            (eff : e a b t) -> 
            EffM m es (updateResTy es prf eff) t
@@ -267,6 +268,7 @@ updateWith []        []        SubNil      = []
 \end{SaveVerbatim}
 \useverb{updwith}
 
+\noindent
 Again, we can construct the necessary proofs of \texttt{SubList} automatically,
 if the sub-program uses a valid set of effects, because all effects are
 statically known, using a reflected tactic \texttt{findSubList}. We implement
@@ -275,9 +277,7 @@ a wrapper \texttt{lift} which builds this proof implicitly:
 \begin{SaveVerbatim}{liftimp}
 
 implicit
-lift : {default tactics { 
-                   reflect findSubList;  
-                }
+lift : {default tactics { reflect findSubList; }
           prf : SubList fs es} ->
        (prog : EffM m fs fs' t) -> 
        EffM m es (updateWith fs' fs prf) t
@@ -290,10 +290,10 @@ lift {prf} e = lift prf e
 The \texttt{implicit} modifier before \texttt{lift} states that this function
 can be used as an \remph{implicit conversion}. Implicit conversions are inspired
 by a similar feature in Scala~\cite{Scala} --- the effect of the \texttt{implicit}
-modifier is, intuitively, that \texttt{lift} will be applied if required to
+modifier is, intuitively, that \texttt{lift} will be applied to
 a program in \texttt{EffM} if it is required for type correctness. It is
 simple to check if an implicit conversion is required during type 
-checking --- since type checking is type directed we always have access to the
+checking --- since type checking is type directed it always has access to the
 required type of an expression, and the implicit coercions which produce
 that type.
 
@@ -302,6 +302,12 @@ implicit coercions in Coq, to avoid coherence problems. Furthermore, to avoid
 ambiguity problems, if there is more than one implicit conversion available
 then \remph{neither} will be applied. In the \Eff{} library, only \texttt{lift}
 is implicit.
+
+\textbf{Remark:} Using the \texttt{SubList} definition, rather than some notion
+of subset, means that in sub-programs the effects must appear in the same order
+as they appear in the caller's effect list. This is not an inherent limitation,
+however --- with improved proof search, we should also be able to support
+effect sets which are \remph{permutations} of another.
 
 \subsubsection{Labelling effects}
 
@@ -344,8 +350,8 @@ This extends the list of effects, initialised with
 a resource of type \texttt{res}.
 Once the sub-program is complete, the resource for the new effect is discarded,
 as is clear from the type of \texttt{new}.
-
-Note that the effect itself, \texttt{e}, is never given explicitly here. This
+%
+The effect itself, \texttt{e}, is never given explicitly here, which
 means that it must be clear from the sub-program what the effect is. Typically,
 this means that the sub-program will be a function with an explicit type.
 
@@ -489,9 +495,8 @@ is available, we use \texttt{execEff}, defined as follows:
 \useverb{invokehandler}
 
 \noindent
-The proof is used to locate the effect in the environment, which also locates
-the handler, since \texttt{Handler eff m} is a constraint on each entry in
-the environment. Following the structure of the interpreter and the handlers,
+The proof is used to locate the effect and handler in the environment.
+Following the structure of the interpreter and the handlers,
 \texttt{execEff} is written in continuation passing style. We can use this
 directly to execute effects:
 
@@ -506,9 +511,9 @@ effInt env (mkEffectP prf effP) k
 \noindent
 Invoking a sub-program with a smaller collection of effects involves dropping
 the unnecessary resources from the environment, invoking the sub-program, then
-rebuilding the environment reinstating the resources which were not used in the
-sub-program. We drop resources from an environment according to the 
-\texttt{SubList} proof with \texttt{dropEnv} as follows:
+rebuilding the environment reinstating the resources which were not used.
+We drop resources from an environment according to the 
+\texttt{SubList} proof with \texttt{dropEnv}:
 
 \begin{SaveVerbatim}{dropenv}
 
@@ -594,7 +599,6 @@ effInt env (l :- prog) k
    = let env' = unlabel env in
          effInt env' prog (\envk, p' => 
                               k (relabel l envk) p')
-
 \end{SaveVerbatim}
 \useverb{efflbl}
 

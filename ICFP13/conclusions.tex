@@ -2,31 +2,88 @@
 
 \label{sect:related}
 
-DDC~\cite{Lippmeier2009},
-Frank\footnote{\url{https://personal.cis.strath.ac.uk/conor.mcbride/pub/Frank/}},
-Koka\footnote{\url{http://research.microsoft.com/en-us/projects/koka/}},
-Eff~\cite{Bauer,Pretnar2010}.
+The work presented in this paper arose from dissatisfaction with the 
+lack of composability of monad transformers, and a belief that a dependently
+typed language ought to handle side-effects more flexibly, in such a way
+that it would be possible to reason about side-effecting programs. The
+inspiration for using an \remph{algebraic} representation of effects was
+Bauer and Pretnar's \remph{Eff} language~\cite{Bauer}, a language
+based around handlers of algebraic effects. In our \Eff{} system, we have
+found type classes to be a natural way of implementing effect handlers,
+particular because they allow different effect handlers to be run in
+different contexts. Other languages aim to bring effects into their
+type system, such as Disciple~\cite{Lippmeier2009}, 
+Frank\footnote{\url{https://personal.cis.strath.ac.uk/conor.mcbride/pub/Frank/}}
+and
+Koka\footnote{\url{http://research.microsoft.com/en-us/projects/koka/}}.
+These languages are built on well-studied theoretical
+foundations~\cite{Hyland2006,Levy2001,Plotkin2009,Pretnar2010}, 
+which we have also applied in this paper.
+%
+In our approach, we have seen that the \Idris{} type system is able to express
+effects by embedding, without any need to extend the language or type system. 
+We make no attempt to \remph{infer} effect types, however, since our intention
+is to specify effects in advance, and check that they are used correctly.
+Nevertheless, since \texttt{EffM} is represented as an algebraic data type,
+a certain amount of effect inference would be possible.
 
-Unlike these other implementations, rather than building a language around
-an algebraic effect system, we have taken the theory of algebraic effects and
-implemented it directly in a general purpose programming language.
+%Also~\cite{Kammar2012}.
 
-Relationship with monad transformers.  
-Work with monads, not against them!
-Earlier PADL work~\cite{bradyresource}.
+While our original motivation was to avoid the need for monad
+transformers~\cite{Liang1995} in order to compose effects, there is a clear
+relationship. Indeed, \texttt{EffM}
+is in a sense a monad transformer itself, in that it may augment an underlying
+monad with additional effects. Therefore, we can expect it to be possible
+to combine effects and monad transformers, where necessary. 
+The problem with modularity of monad transformers is well-known, and addressed
+to some extent~\cite{Jaskelioff2009}, though this still does not allow easy
+reordering of transformers, or reducing the transformer stack.
+The \Eff{} approach encourages a more fine-grained separation of effects,
+by making it easy to call functions which use a smaller set of effects.
 
-Xi, imperative programming with dependent types~\cite{Xi2000}.
-Typestate?~\cite{Strom1986,Aldrich2009}
+The approach we have taken, with resources associated with each effect,
+leads to a natural way of expressing and verifying resource usage protocols,
+by updating the resource type. This is a problem previously tackled by
+others, using special purpose type systems~\cite{Walker2000} 
+or Haskell extensions~\cite{McBride2011}, and in my own previous
+work~\cite{Brady2010a,bradyresource} by creating a DSL for resource management,
+but these are less flexible than the present approach in that
+combining resources is difficult. 
+A related concept is
+Typestate~\cite{Aldrich2009,Strom1986}, which similarly allows states to
+be tracked in types, though again, we are able to implement this directly
+rather than by extending the language. 
 
-(Point about typestate and effects: there are languages built around these
-concepts.  We have done neither, but built a language flexible enough to
-capture the same concepts.)
+To some extent, we can now support imperative programming with dependent
+types, such as supported by Xanadu~\cite{Xi2000} and Ynot~\cite{Ynot2008}. 
+Ynot in particular is an axiomatic extension to Coq which allows reasoning
+about imperative programs using Hoare Type Theory~\cite{HoareTT2008} ---
+preconditions and postconditions on operations can be expressed in \Eff{} by
+giving appropriate
+input and output resource types.
+%
+The difficulty in imperative programming with dependent types is that
+updating one value may affect the type of another, though in our interpreter
+example in Section \ref{sect:impint} we have safely used a dependent type
+in a mutable state.
 
-Theoretical work on effects: Plotkin, Power, Kammar, etc. Free monads?
+%(Point about typestate and effects: there are languages built around these
+%concepts.  We have done neither, but built a language flexible enough to
+%capture the same concepts.)
 
 \section{Conclusions}
 
 \label{sect:conclusion}
+
+\Idris{} is a new language, with a full dependent type system. A new language
+with a new type system gives us an ideal opportunity to revisit old problems
+about how to handle effects in a pure functional language --- while the old
+approach, based on monads and transformers, has proved successful in
+Haskell, in this paper we have investigated an alternative approach 
+found it to be a natural approach to defining and using effects.
+By linking each effect with a \remph{resource} we can even track the state
+of resources through program execution, and reason about resource usage
+protocols such as file management. 
 
 What dependent type features did we need? Obvious question: what would
 it take to do this in Haskell? We used dependent types in a fairly limited
@@ -41,6 +98,9 @@ mutable arrays, and in particular
 it will be possible to have fine-grained separation of systems effects, e.g.
 we can be precise about needing network support, CGI, graphics, OS
 environment, etc, rather than throwing it all into one IO monad.
+
+Some other effects we could implement: parsing, IO references, mutable
+arrays (which could be bounded, and guarantee one copy, so stored compactly).
 
 We can still use the monadic implementations we know and love --- effects work
 \remph{with} monads rather than against them, and indeed effectful programs
@@ -63,6 +123,8 @@ shared state.
 
 \subsection{Further Work}
 
+We have only just begun.
+
 See if it works in practice, then efficiency --- partial evaluation as in
 ~\cite{Brady2010} is not quite enough, but using case operators rather
 than pattern matching ought to make it enough.
@@ -77,4 +139,5 @@ Possibly making handle more flexible so that it can allow resources to interact
 What about doing this in Haskell? Recent type system extensions, plus type
 classes for automatic proof construction. Do we really need monad transformers
 for combining effects any more?
+
 

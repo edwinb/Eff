@@ -224,7 +224,7 @@ to check that it is supported, and invokes the effect using the corresponding
 resource. This leads to an important question: what if we have more than one 
 effect which supports the function? A particular situation where this arises
 is when we have more than one integer state.
-
+%
 For example, imagine we would like to count the number of \texttt{Leaf} nodes
 in a tree while tagging nodes.  In this case, we will need two integer states:
 
@@ -504,12 +504,12 @@ Handlers are parameterised by the effect they handle, and the context in which
 they handle the effect. This allows several different context-dependent
 handlers to be written --- e.g. exceptions could be handled differently in an
 \texttt{IO} setting than in a \texttt{Maybe} setting. When effects are combined,
-as in the evaluator example above, it is required that all of the effects
-can be combined in the context in which the program is run.
+as in the evaluator example, all effects must be handled
+in the context in which the program is run.
 
 An effect \texttt{e res res' t} updates a resource type \texttt{res} to a
 resource type \texttt{res'}, returning a value \texttt{t}. The handler, therefore,
-implements this update, possibly performing side effects on the way.
+implements this update in a context \texttt{m} which may support side effects.
 The handler is written in continuation passing style. This is for two reasons:
 Firstly, it returns two values, a new resource and the result of the computation,
 which is more cleanly managed in a continuation than by returning a tuple;
@@ -517,8 +517,8 @@ secondly, and more importantly, it gives the handler the flexibility to invoke
 the continuation any number of times (zero or more).
 
 An \texttt{Effect}, which is the internal algebraic description of an effect,
-is promoted into an \texttt{EFFECT}, which is expected by the \texttt{EffM}
-structure, with the \texttt{MkEff} constructor:
+is promoted into a concrete \texttt{EFFECT}, which is expected by the
+\texttt{EffM} structure, with the \texttt{MkEff} constructor:
 
 \begin{SaveVerbatim}{efft}
 
@@ -594,10 +594,10 @@ are correspondingly in all upper case.
 Algebraic effects are promoted to \Eff{} programs with concrete effects
 by using the
 \texttt{mkEffect} function. We will postpone giving the type of
-\texttt{mkEffect} until Section \ref{sect:mkeffect} --- it is not important to
-know this for creating effects, and suffices to know that it converts an
-\texttt{Effect} to an effectful program. To create the \texttt{get} function in
-\Eff{}, for example:
+\texttt{mkEffect} until Section \ref{sect:mkeffect} --- for now,
+it suffices to know that it converts an
+\texttt{Effect} to an effectful program. To create the \texttt{get} and
+\texttt{put} functions, for example:
 
 \begin{SaveVerbatim}{getdef}
 
@@ -607,11 +607,7 @@ get = mkEffect Get
 \end{SaveVerbatim}
 \useverb{getdef}
 
-\noindent
-Implementing \texttt{put} is similar:
-
 \begin{SaveVerbatim}{putdef}
-
 put : x -> Eff m [STATE x] ()
 put val = mkEffect (Put val)
 
@@ -639,19 +635,19 @@ update:
 \begin{SaveVerbatim}{update}
 
 update : (x -> x) -> Eff m [STATE x] ()
-update f = do val <- get
-              put (f val) 
+update f = do val <- get; put (f val) 
 
 \end{SaveVerbatim}
 \useverb{update}
 
 \subsubsection{Console I/O}
 
-We consider a simplified version of console I/O which supports writing strings
-to the console, and reading strings. There is no resource associated with
-console I/O (although in an alternative implementation we may associate it
-with an abstract world state, or a pair of file handles for \texttt{stdin}
-and \texttt{stdout}). Algebraically, we describe console I/O as follows:
+We consider a simplified version of console I/O which supports reading
+and writing strings to and from the console. There is no associated resource,
+although in an alternative implementation we may associate it with an abstract
+world state, or a pair of file handles for \texttt{stdin}/\texttt{stdout}.
+Algebraically:
+%we describe console I/O as follows:
 
 \begin{SaveVerbatim}{stdioeff}
 
@@ -683,8 +679,8 @@ Unlike the \texttt{State} effect, for which the handler worked in \remph{all}
 contexts, this handler only applies to effectful programs run in an \texttt{IO}
 context. We can implement alternative handlers, and indeed there is no
 reason that effectful programs in \texttt{StdIO} must be evaluated in a monadic
-context. For example, we can define I/O stream functions and an associated
-handler:
+context. For example, we can define I/O stream functions:
+%and an associated handler:
 
 \begin{SaveVerbatim}{iostream}
 
@@ -692,21 +688,23 @@ data IOStream a
    = MkStream (List String -> (a, List String))
 
 instance Handler StdIO IOStream where
-    ....
-
+    ...
 \end{SaveVerbatim}
 \useverb{iostream}
 
 \noindent
 A handler for \texttt{StdIO} in \texttt{IOStream} context generates a function
 from a list of strings (the input text) to a value and the output text. We
-can build a pure function which simuates an effectful console I/O program
-using the following function:
+can build a pure function which simulates real console I/O:
 
-\begin{SaveVerbatim}{mkstrfun}
+\begin{SaveVerbatim}{mkstrfunty}
 
 mkStrFn : Env IOStream xs -> Eff IOStream xs a -> 
           List String -> (a, List String)
+\end{SaveVerbatim}
+\useverb{mkstrfunty}
+
+\begin{SaveVerbatim}{mkstrfun}
 mkStrFn {a} env p input = case mkStrFn' of
                                MkStream f => f input
   where injStream : a -> IOStream a
@@ -752,16 +750,18 @@ $
 
 \noindent
 This suggests that alternative, pure, handlers for console I/O,
-or any I/O effect for that matter, can be used for unit testing I/O programs
-without executing any real I/O and possibly even proving theorems about them.
+or any I/O effect, can be used for unit testing and reasoning about I/O programs
+without executing any real I/O.
+%and possibly even proving theorems about them.
 
 \subsubsection{Exceptions}
 
 The exception effect supports only one operation, \texttt{Raise}.
-Exceptions are parameterised over the error type \texttt{e}, so \texttt{Raise}
+Exceptions are parameterised over an error type \texttt{e}, so \texttt{Raise}
 takes a single argument to represent the error. The associated resource is
-unit, and since raising an exception cause computation to abort, it can return
-a value of any type.
+of unit type, and since raising an exception causes computation to abort, 
+raising an exception can return a value of any type.
+%, since it will not be used.
 
 \begin{SaveVerbatim}{exctype}
 
@@ -803,7 +803,7 @@ instance Handler (Exception e) (Either e) where
 \useverb{exceither}
 
 \noindent
-Given that we can raise exceptions in an \Eff{} program, it's also useful to be
+Given that we can raise exceptions in an \Eff{} program, it is also useful to be
 able to catch them. The \texttt{catch} operation runs a possibly failing
 computation \texttt{comp} in some context \texttt{m}, running \texttt{handler}
 if the computation fails:
@@ -833,9 +833,11 @@ class Catchable (m : Type -> Type) t where
 \useverb{catchable}
 
 \noindent
-This is implemented directly as part of the \Eff{} DSL --- any effectful
-computation may fail, and therefore implement a handler in a \texttt{Catchable}
-context after all. We have a simple instance for \texttt{Maybe}, provided that
+This is implemented directly as part of the \Eff{} DSL.
+%--- any effectful
+%computation may fail, and therefore implement a handler in a \texttt{Catchable}
+%context after all. 
+We have a simple instance for \texttt{Maybe}, provided that
 the error thrown is the unit error:
 
 \begin{SaveVerbatim}{catchablemaybe}
@@ -882,7 +884,7 @@ RND = MkEff Int Random
 
 \noindent
 Handling random number generation shows that it is a state effect in
-disguise, where the effect updates the seed according to a simple rule.
+disguise, where the effect updates the seed.
 This is a simple linear congruential pseudo-random number generator:
 
 \begin{SaveVerbatim}{randomhandle}
@@ -942,12 +944,10 @@ data FileIO : Effect where
      Open  : String -> (m : Mode) -> 
              FileIO () (OpenFile m) ()
      Close : FileIO (OpenFile m) () ()
-
 \end{SaveVerbatim}
 \useverb{fileio}
 
 \begin{SaveVerbatim}{fileio2}
-
      ReadLine  : FileIO (OpenFile Read)  
                         (OpenFile Read) String
      WriteLine : String -> 
@@ -1192,7 +1192,7 @@ getQueens = run [()] (addQueens 8 [])
 \useverb{getqueens}
 
 \noindent
-Then to find the first solution, we can run \texttt{getQueens} at the \Idris{}
+Then to find the first solution, we run \texttt{getQueens} at the %\Idris{}
 REPL:
 
 \begin{SaveVerbatim}{queenmaybe}
@@ -1212,3 +1212,27 @@ that state cannot be shared between branches. While perhaps not so important
 for selection, this may be a problem for other control effects such as 
 co-operative multithreading, for which we may need a more flexible handler if
 we wish to deal with shared state. We will deal with this issue in future work.
+
+\subsection{Effect Polymorphism}
+
+Since \Eff{} is implemented as an embedding in a host language, we can exploit
+features of the host language. The means that we can write higher order
+functions, and functions which are polymorphic in their effects. For example,
+a \texttt{mapEff} function can be implemented corresponding to \texttt{fmap}
+for functors:
+
+\noindent
+\begin{SaveVerbatim}{mapeff}
+
+mapEff : Applicative m => 
+         (a -> Eff m xs b) -> List a -> Eff m xs (List b)
+mapEff f []        = pure [] 
+mapEff f (x :: xs) = [| f x :: mapEff f xs |]
+
+\end{SaveVerbatim}
+\useverb{mapeff}
+
+\noindent
+This applies an effectful function across a list, provided that we are in
+an applicative context, and that the effectful function supports the correct
+set of effects.

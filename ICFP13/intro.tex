@@ -87,7 +87,9 @@ We have been able to build this interpreter from reusable components --- the
 \texttt{Maybe} monad and \texttt{ReaderT} and \texttt{RandT} transformers ---
 which is clearly a good thing. One small problem, however, is that the use of
 \texttt{lift} is a little noisy, and will only get worse if we add more
-monads to the stack, such as \texttt{IO}. Bigger problems occur if we need
+monads to the stack, such as \texttt{IO}, though implementations of 
+\texttt{lift} can be automated~\cite{Jaskelioff2009}.
+Bigger problems occur if we need
 to permute the order of the transformers, or invoke a function which uses a
 subset, for example:
 
@@ -118,7 +120,7 @@ In this paper, I present an alternative approach to combining effects in
 a pure functional programming language, based on handlers of
 \remph{algebraic effects}~\cite{Bauer}, and
 implemented directly as a domain specific language embedded
-in a dependently typed host language, \Idris{}~\cite{Brady2013,idristutorial}.
+in a dependently typed host, \Idris{}~\cite{Brady2013,idristutorial}.
 
 \subsection{Contributions}
 
@@ -143,8 +145,8 @@ variety of underlying contexts using \emph{effect handlers}.
 File and Console I/O, random number generation and
 non-determinism) and their handlers. I show how alternative handlers
 can be used to evaluate effects in different contexts. In particular, we can
-implement unit tests for (and possibly reason about) IO programs by handling
-the effect in the context of input and output streams.
+implement unit tests for (and possibly reason about) interactive programs by
+handling the effect in the context of input and output streams.
 \item I give example programs which combine effects, including a larger
 example, an interpreter for an imperative language with mutable variables, to
 illustrate how effectful applications may be structured.
