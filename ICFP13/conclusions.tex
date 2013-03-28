@@ -88,7 +88,7 @@ The \Eff{} approach has a number of strengths, and some weaknesses which
 we hope to address in future work. The main strength is that many
 common effects such as state, I/O and exceptions can be combined without
 the need for monad transformers. Effects can be implemented independently,
-and combined without furhter effort. Lifting is automatic --- sub-programs
+and combined without further effort. Lifting is automatic --- sub-programs
 using a smaller set of effects can be called without any explicit lifting
 operation, so as well as being easy to combine effects, programs
 remain readable. We have described a number of effects which are representable
@@ -114,7 +114,7 @@ continuations) can remain so, and still work with \Eff{}.
 
 The \Eff{} system is promising as a general approach to effectful programming,
 but we have only just begun. At present, we are developing more libraries
-using \Eff{} to assess how well it works in practice as a progamming tool,
+using \Eff{} to assess how well it works in practice as a programming tool,
 as well as how efficient it is for realistic programs.
 
 The most obvious weakness of \Eff{}, which is already known for the algebraic
@@ -139,12 +139,12 @@ usual \texttt{handle}, which manages resources more precisely.
 
 An implementation detail which could be improved without affect usage of
 the library is that effectful sub-programs require ordering of effects
-to be preserved. This should be a small improvement, merely requiring permuation
+to be preserved. This should be a small improvement, merely requiring permutation
 proofs of lists, but ideally generating these proofs will be automatic.
 
 The \Eff{} implementation is entirely within the \Idris{} language --- no
 extensions were needed. It takes advantage of dependent types and theorem
-proving in several small but important ways: heterogenous lists of resources,
+proving in several small but important ways: heterogeneous lists of resources,
 proofs of list membership and sub-list predicates, and parameterisation of
 resources. Since modern Haskell supports many of these features, this leads
 to an obvious question: what would it take to implement \Eff{} as an embedded

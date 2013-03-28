@@ -213,7 +213,7 @@ in the context of \texttt{IO}, \texttt{Maybe} or \texttt{Either}.
 %
 We will return to the definition of \texttt{Env} in Section \ref{sect:envdef}.
 % For the moment, 
-For now, it suffices to know that it is a heterogenous list of values
+For now, it suffices to know that it is a heterogeneous list of values
 for the initial resources \texttt{es}.
 
 \subsubsection{Labelled Effects}
@@ -422,7 +422,7 @@ pure f <$> a <$> b <$> c <$> d
 \noindent
 In order to run this evaluator, we must provide initial values for the resources
 associated with each effect. Exceptions require the unit resource, random
-number generation requires an initial seed, and the state requries an initial
+number generation requires an initial seed, and the state requires an initial
 environment. We instantiate \texttt{m} with \texttt{Maybe} to be able
 to handle exceptions:
 
@@ -581,7 +581,7 @@ is passed to the continuation as the new resource value.
 
 We then convert the algebraic effect \texttt{State} to a concrete
 effect usable in an \Eff{} program using the \texttt{STATE} function, to which
-we provide the initial state type as folllows:
+we provide the initial state type as follows:
 
 \begin{SaveVerbatim}{statepromote}
 
@@ -1140,7 +1140,7 @@ instance Handler Selection List where
 We can use the \texttt{Selection} effect to implement search problems by
 non-deterministically choosing from a list of candidate solutions. For example,
 a solution to the n-Queens problem can be implemented as follows.
-First, we write a function which checks whether a point on a chessboard
+First, we write a function which checks whether a point on a chess board
 attacks another if occupied by a Queen:
 
 \begin{SaveVerbatim}{noattack}
